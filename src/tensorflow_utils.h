@@ -25,7 +25,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #pragma once
 
-#include "src/backends/tensorflow/tensorflow_backend_tf.h"
+#include "tensorflow_backend_tf.h"
 #include "triton/common/tritonserver.h"
 
 namespace triton { namespace backend { namespace tensorflow {

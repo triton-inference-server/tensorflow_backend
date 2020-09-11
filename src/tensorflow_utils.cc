@@ -24,7 +24,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "src/backends/backend/tensorflow/tf_utils.h"
+#include "tensorflow_utils.h"
 
 #include "triton/backend/backend_common.h"
 

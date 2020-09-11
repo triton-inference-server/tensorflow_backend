@@ -85,6 +85,13 @@ endif() # TRITON_ENABLE_GPU
 #
 # Shared library implementing the Triton Backend API
 #
+# tensorflow_backend_tf.cc is copied and built into the TensorFlow
+# container build (which is independent of any of the Triton
+# build). This is done to ensure that it uses the same protobuf as
+# TensorFlow. It is kept in this repo only as
+# reference. tensorflow_backend_tf.h is also copied into TensorFlow
+# build and it used here as the interface to TensorFlow.
+#
 configure_file(src/libtriton_tensorflow.ldscript libtriton_tensorflow.ldscript COPYONLY)
 
 add_library(
@@ -92,6 +99,7 @@ add_library(
   src/tensorflow.cc
   src/tensorflow_utils.cc
   src/tensorflow_utils.h
+  src/tensorflow_backend_tf.h
 )
 
 add_library(
