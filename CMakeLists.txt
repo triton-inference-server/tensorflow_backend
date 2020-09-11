@@ -1,0 +1,203 @@
+# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+#  * Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+#  * Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+#  * Neither the name of NVIDIA CORPORATION nor the names of its
+#    contributors may be used to endorse or promote products derived
+#    from this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ``AS IS'' AND ANY
+# EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+# PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
+# OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+cmake_minimum_required(VERSION 3.17)
+
+project(tritontensorflowbackend LANGUAGES C CXX)
+
+#
+# Options
+#
+option(TRITON_ENABLE_GPU "Enable GPU support in backend" ON)
+option(TRITON_ENABLE_STATS "Include statistics collections in backend" ON)
+set(TRITON_TENSORFLOW_VERSION "1" CACHE STRING "TensorFlow version, must be '1' or '2'")
+set(TRITON_TENSORFLOW_INCLUDE_PATHS "" CACHE PATH "Paths to TensorFlow includes")
+set(TRITON_TENSORFLOW_LIB_PATHS "" CACHE PATH "Paths to TensorFlow libraries")
+
+set(TRITON_BACKEND_REPO_TAG "main" CACHE STRING "Tag for triton-inference-server/backend repo")
+set(TRITON_COMMON_REPO_TAG "main" CACHE STRING "Tag for triton-inference-server/common repo")
+
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+
+set(TRITON_TENSORFLOW_LIBNAME triton_tensorflow1)
+set(TRITON_TENSORFLOW_LDFLAGS "-ltensorflow_trtis")
+if (${TRITON_TENSORFLOW_VERSION} EQUAL "2")
+  set(TRITON_TENSORFLOW_LIBNAME triton_tensorflow2)
+  set(TRITON_TENSORFLOW_LDFLAGS "-ltensorflow_triton")
+elseif (NOT (${TRITON_TENSORFLOW_VERSION} EQUAL "1"))
+  message(FATAL_ERROR "TRITON_TENSORFLOW_VERSION value values are '1' and '2'")
+endif()
+
+#
+# Dependencies
+#
+# FetchContent's composibility isn't very good. We must include the
+# transitive closure of all repos so that we can override the tag.
+#
+include(FetchContent)
+
+FetchContent_Declare(
+  repo-common
+  GIT_REPOSITORY https://github.com/triton-inference-server/common.git
+  GIT_TAG ${TRITON_COMMON_REPO_TAG}
+  GIT_SHALLOW ON
+)
+FetchContent_Declare(
+  repo-backend
+  GIT_REPOSITORY https://github.com/triton-inference-server/backend.git
+  GIT_TAG ${TRITON_BACKEND_REPO_TAG}
+  GIT_SHALLOW ON
+)
+FetchContent_MakeAvailable(repo-common repo-backend)
+
+#
+# CUDA
+#
+if(${TRITON_ENABLE_GPU})
+  find_package(CUDAToolkit REQUIRED)
+endif() # TRITON_ENABLE_GPU
+
+#
+# Shared library implementing the Triton Backend API
+#
+configure_file(src/libtriton_tensorflow.ldscript libtriton_tensorflow.ldscript COPYONLY)
+
+add_library(
+  triton-tensorflow-backend SHARED
+  src/tensorflow.cc
+  src/tensorflow_utils.cc
+  src/tensorflow_utils.h
+)
+
+add_library(
+  TritonTensorFlowBackend::triton-tensorflow-backend ALIAS triton-tensorflow-backend
+)
+
+target_include_directories(
+  triton-tensorflow-backend
+  PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${TRITON_TENSORFLOW_INCLUDE_PATHS}
+)
+
+target_compile_features(triton-tensorflow-backend PRIVATE cxx_std_11)
+target_compile_options(
+  triton-tensorflow-backend PRIVATE
+  $<$<OR:$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>,$<CXX_COMPILER_ID:GNU>>:
+    -Wall -Wextra -Wno-unused-parameter -Werror>
+)
+
+# C/C++ defines that are used directly by this backend.
+if(${TRITON_ENABLE_GPU})
+  target_compile_definitions(
+    triton-tensorflow-backend
+    PRIVATE TRITON_ENABLE_GPU=1
+  )
+endif() # TRITON_ENABLE_GPU
+
+set_target_properties(
+  triton-tensorflow-backend
+  PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+    OUTPUT_NAME ${TRITON_TENSORFLOW_LIBNAME}
+    SKIP_BUILD_RPATH TRUE
+    BUILD_WITH_INSTALL_RPATH TRUE
+    INSTALL_RPATH_USE_LINK_PATH FALSE
+    INSTALL_RPATH "$\{ORIGIN\}"
+    LINK_DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/libtriton_tensorflow.ldscript
+    LINK_FLAGS "-Wl,--version-script libtriton_tensorflow.ldscript"
+)
+
+FOREACH(p ${TRITON_TENSORFLOW_LIB_PATHS})
+  set(TRITON_TENSORFLOW_LDFLAGS ${TRITON_TENSORFLOW_LDFLAGS} "-L${p}")
+ENDFOREACH(p)
+
+target_link_libraries(
+  triton-tensorflow-backend
+  PRIVATE
+    triton-backend-utils  # from repo-backend
+    ${TRITON_TENSORFLOW_LDFLAGS}
+)
+
+if(${TRITON_ENABLE_GPU})
+  target_link_libraries(
+    triton-tensorflow-backend
+    PRIVATE
+      CUDA::cudart
+  )
+endif() # TRITON_ENABLE_GPU
+
+#
+# Install
+#
+include(GNUInstallDirs)
+set(INSTALL_CONFIGDIR ${CMAKE_INSTALL_LIBDIR}/cmake/TritonTensorFlowBackend)
+
+install(
+  TARGETS
+    triton-tensorflow-backend
+  EXPORT
+    triton-tensorflow-backend-targets
+  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+
+install(
+  EXPORT
+    triton-tensorflow-backend-targets
+  FILE
+    TritonTensorFlowBackendTargets.cmake
+  NAMESPACE
+    TritonTensorFlowBackend::
+  DESTINATION
+    ${INSTALL_CONFIGDIR}
+)
+
+include(CMakePackageConfigHelpers)
+configure_package_config_file(
+  ${CMAKE_CURRENT_LIST_DIR}/cmake/TritonTensorFlowBackendConfig.cmake.in
+  ${CMAKE_CURRENT_BINARY_DIR}/TritonTensorFlowBackendConfig.cmake
+  INSTALL_DESTINATION ${INSTALL_CONFIGDIR}
+)
+
+install(
+  FILES
+  ${CMAKE_CURRENT_BINARY_DIR}/TritonTensorFlowBackendConfig.cmake
+  DESTINATION ${INSTALL_CONFIGDIR}
+)
+
+#
+# Export from build tree
+#
+export(
+  EXPORT triton-tensorflow-backend-targets
+  FILE ${CMAKE_CURRENT_BINARY_DIR}/TritonTensorFlowBackendTargets.cmake
+  NAMESPACE TritonTensorFlowBackend::
+)
+
+export(PACKAGE TritonTensorFlowBackend)
