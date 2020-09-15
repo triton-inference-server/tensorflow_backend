@@ -26,7 +26,7 @@
 #pragma once
 
 #include "tensorflow_backend_tf.h"
-#include "triton/common/tritonserver.h"
+#include "triton/core/tritonserver.h"
 
 namespace triton { namespace backend { namespace tensorflow {
 
