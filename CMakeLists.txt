@@ -47,9 +47,11 @@ endif()
 
 set(TRITON_TENSORFLOW_LIBNAME triton_tensorflow1)
 set(TRITON_TENSORFLOW_LDFLAGS "-ltensorflow_trtis")
+set(TRITON_TENSORFLOW_INSTALLDIR ${CMAKE_INSTALL_PREFIX}/backends/tensorflow1)
 if (${TRITON_TENSORFLOW_VERSION} EQUAL "2")
   set(TRITON_TENSORFLOW_LIBNAME triton_tensorflow2)
   set(TRITON_TENSORFLOW_LDFLAGS "-ltensorflow_triton")
+  set(TRITON_TENSORFLOW_INSTALLDIR ${CMAKE_INSTALL_PREFIX}/backends/tensorflow2)
 elseif (NOT (${TRITON_TENSORFLOW_VERSION} EQUAL "1"))
   message(FATAL_ERROR "TRITON_TENSORFLOW_VERSION allowed values are '1' and '2'")
 endif()
@@ -179,8 +181,8 @@ install(
     triton-tensorflow-backend
   EXPORT
     triton-tensorflow-backend-targets
-  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  LIBRARY DESTINATION ${TRITON_TENSORFLOW_INSTALLDIR}
+  ARCHIVE DESTINATION ${TRITON_TENSORFLOW_INSTALLDIR}
 )
 
 install(
