@@ -30,14 +30,38 @@
 
 # TensorFlow Backend
 
-The Triton backend for TensorFlow.
+The Triton backend for TensorFlow.  You can learn more about backends
+in the [backend
+repo](https://github.com/triton-inference-server/backend). Ask
+questions or report problems in the main Triton [issues
+page](https://github.com/triton-inference-server/server/issues).
 
-Use a recent cmake to build and install in a local directory.
+Use a recent cmake to build. Rirst install the required dependencies.
+
+```
+$ apt-get install patchelf rapidjson-dev
+```
+
+The backend can be built to support either TensorFlow 1.x or
+TensorFlow 2.x. As explained below in FIXME, an appropriate TensorFlow
+container from [NGC](ngc.nvidia.com) must be used. For example, to
+build a backend that uses the 20.08 version of the TensorFlow 1.x
+container from NGC:
 
 ```
 $ mkdir build
 $ cd build
-$ cmake -DCMAKE_INSTALL_PREFIX:PATH=`pwd`/install ..
+$ cmake -DCMAKE_INSTALL_PREFIX:PATH=`pwd`/install -DTRITON_TENSORFLOW_VERSION=1 -DTRITON_TENSORFLOW_DOCKER_IMAGE="nvcr.io/nvidia/tensorflow:20.08-tf1-py3" ..
+$ make install
+```
+
+For example, to build a backend that uses the 20.08 version of the
+TensorFlow 2.x container from NGC:
+
+```
+$ mkdir build
+$ cd build
+$ cmake -DCMAKE_INSTALL_PREFIX:PATH=`pwd`/install -DTRITON_TENSORFLOW_VERSION=2 -DTRITON_TENSORFLOW_DOCKER_IMAGE="nvcr.io/nvidia/tensorflow:20.08-tf2-py3" ..
 $ make install
 ```
 

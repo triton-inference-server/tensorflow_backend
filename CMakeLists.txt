@@ -34,8 +34,8 @@ project(tritontensorflowbackend LANGUAGES C CXX)
 option(TRITON_ENABLE_GPU "Enable GPU support in backend" ON)
 option(TRITON_ENABLE_STATS "Include statistics collections in backend" ON)
 set(TRITON_TENSORFLOW_VERSION "1" CACHE STRING "TensorFlow version, must be '1' or '2'")
-set(TRITON_TENSORFLOW_INCLUDE_PATHS "" CACHE PATH "Paths to TensorFlow includes")
-set(TRITON_TENSORFLOW_LIB_PATHS "" CACHE PATH "Paths to TensorFlow libraries")
+set(TRITON_TENSORFLOW_DOCKER_IMAGE "nvcr.io/nvidia/tensorflow:20.08-tf1-py3" CACHE STRING
+    "Docker image containing the TensorFlow build required by backend")
 
 set(TRITON_BACKEND_REPO_TAG "main" CACHE STRING "Tag for triton-inference-server/backend repo")
 set(TRITON_CORE_REPO_TAG "main" CACHE STRING "Tag for triton-inference-server/core repo")
@@ -45,13 +45,13 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-set(TRITON_TENSORFLOW_LIBNAME triton_tensorflow1)
-set(TRITON_TENSORFLOW_LDFLAGS "-ltensorflow_trtis")
-set(TRITON_TENSORFLOW_INSTALLDIR ${CMAKE_INSTALL_PREFIX}/backends/tensorflow1)
+set(TRITON_TENSORFLOW_LIBNAME "libtensorflow_trtis.so")
+set(TRITON_TENSORFLOW_BACKEND_LIBNAME triton_tensorflow1)
+set(TRITON_TENSORFLOW_BACKEND_INSTALLDIR ${CMAKE_INSTALL_PREFIX}/backends/tensorflow1)
 if (${TRITON_TENSORFLOW_VERSION} EQUAL "2")
-  set(TRITON_TENSORFLOW_LIBNAME triton_tensorflow2)
-  set(TRITON_TENSORFLOW_LDFLAGS "-ltensorflow_triton")
-  set(TRITON_TENSORFLOW_INSTALLDIR ${CMAKE_INSTALL_PREFIX}/backends/tensorflow2)
+  set(TRITON_TENSORFLOW_LIBNAME "libtensorflow_triton.so")
+  set(TRITON_TENSORFLOW_BACKEND_LIBNAME triton_tensorflow2)
+  set(TRITON_TENSORFLOW_BACKEND_INSTALLDIR ${CMAKE_INSTALL_PREFIX}/backends/tensorflow2)
 elseif (NOT (${TRITON_TENSORFLOW_VERSION} EQUAL "1"))
   message(FATAL_ERROR "TRITON_TENSORFLOW_VERSION allowed values are '1' and '2'")
 endif()
@@ -103,6 +103,27 @@ endif() # TRITON_ENABLE_GPU
 #
 configure_file(src/libtriton_tensorflow.ldscript libtriton_tensorflow.ldscript COPYONLY)
 
+add_custom_command(
+  OUTPUT
+    ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
+    LICENSE.tensorflow
+  COMMAND docker pull ${TRITON_TENSORFLOW_DOCKER_IMAGE}
+  COMMAND docker rm tensorflow_backend_tflib || echo "error ignored..." || true
+  COMMAND docker create --name tensorflow_backend_tflib ${TRITON_TENSORFLOW_DOCKER_IMAGE}
+  COMMAND docker cp tensorflow_backend_tflib:/usr/local/lib/tensorflow/${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
+  COMMAND docker cp tensorflow_backend_tflib:/opt/tensorflow/tensorflow-source/LICENSE LICENSE.tensorflow
+  COMMAND docker rm tensorflow_backend_tflib
+  COMMENT "Extracting ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} from ${TRITON_TENSORFLOW_DOCKER_IMAGE}"
+)
+add_custom_target(tflib_target DEPENDS ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION})
+add_library(tflib SHARED IMPORTED GLOBAL)
+add_dependencies(tflib tflib_target)
+set_target_properties(
+  tflib
+  PROPERTIES
+    IMPORTED_LOCATION ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
+)
+
 add_library(
   triton-tensorflow-backend SHARED
   src/tensorflow.cc
@@ -119,7 +140,6 @@ target_include_directories(
   triton-tensorflow-backend
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${TRITON_TENSORFLOW_INCLUDE_PATHS}
 )
 
 target_compile_features(triton-tensorflow-backend PRIVATE cxx_std_11)
@@ -141,7 +161,7 @@ set_target_properties(
   triton-tensorflow-backend
   PROPERTIES
     POSITION_INDEPENDENT_CODE ON
-    OUTPUT_NAME ${TRITON_TENSORFLOW_LIBNAME}
+    OUTPUT_NAME ${TRITON_TENSORFLOW_BACKEND_LIBNAME}
     SKIP_BUILD_RPATH TRUE
     BUILD_WITH_INSTALL_RPATH TRUE
     INSTALL_RPATH_USE_LINK_PATH FALSE
@@ -150,16 +170,12 @@ set_target_properties(
     LINK_FLAGS "-Wl,--version-script libtriton_tensorflow.ldscript"
 )
 
-FOREACH(p ${TRITON_TENSORFLOW_LIB_PATHS})
-  set(TRITON_TENSORFLOW_LDFLAGS ${TRITON_TENSORFLOW_LDFLAGS} "-L${p}")
-ENDFOREACH(p)
-
 target_link_libraries(
   triton-tensorflow-backend
   PRIVATE
     triton-core-serverapi # from repo-core
     triton-backend-utils  # from repo-backend
-    ${TRITON_TENSORFLOW_LDFLAGS}
+    tflib
 )
 
 if(${TRITON_ENABLE_GPU})
@@ -181,8 +197,30 @@ install(
     triton-tensorflow-backend
   EXPORT
     triton-tensorflow-backend-targets
-  LIBRARY DESTINATION ${TRITON_TENSORFLOW_INSTALLDIR}
-  ARCHIVE DESTINATION ${TRITON_TENSORFLOW_INSTALLDIR}
+  LIBRARY DESTINATION ${TRITON_TENSORFLOW_BACKEND_INSTALLDIR}
+  ARCHIVE DESTINATION ${TRITON_TENSORFLOW_BACKEND_INSTALLDIR}
+)
+
+install(
+  FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
+    ${CMAKE_CURRENT_BINARY_DIR}/LICENSE.tensorflow
+  DESTINATION ${TRITON_TENSORFLOW_BACKEND_INSTALLDIR}
+)
+
+install(
+  CODE
+    "EXECUTE_PROCESS(
+       COMMAND patchelf --set-rpath '$ORIGIN' ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}        COMMAND ln -sf ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_LIBNAME}
+       COMMAND ln -sf ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} libtensorflow_framework.so.${TRITON_TENSORFLOW_VERSION}
+       COMMAND ln -sf libtensorflow_framework.so.${TRITON_TENSORFLOW_VERSION} libtensorflow_framework.so
+       COMMAND ln -sf ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} libtensorflow_cc.so.${TRITON_TENSORFLOW_VERSION}
+       COMMAND ln -sf libtensorflow_cc.so.${TRITON_TENSORFLOW_VERSION} libtensorflow_cc.so
+       RESULT_VARIABLE TTB_INSTALL_STATUS
+       WORKING_DIRECTORY ${TRITON_TENSORFLOW_BACKEND_INSTALLDIR})
+     if(TTB_INSTALL_STATUS AND NOT TTB_INSTALL_STATUS EQUAL 0)
+       message(FATAL_ERROR \"FAILED: to run patchelf and create links\")
+     endif()"
 )
 
 install(
@@ -205,7 +243,7 @@ configure_package_config_file(
 
 install(
   FILES
-  ${CMAKE_CURRENT_BINARY_DIR}/TritonTensorFlowBackendConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/TritonTensorFlowBackendConfig.cmake
   DESTINATION ${INSTALL_CONFIGDIR}
 )
 
