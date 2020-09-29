@@ -36,17 +36,53 @@ repo](https://github.com/triton-inference-server/backend). Ask
 questions or report problems in the main Triton [issues
 page](https://github.com/triton-inference-server/server/issues).
 
-Use a recent cmake to build. Rirst install the required dependencies.
+## Frequently Asked Questions
+
+Full documentation is included below but these shortcuts can help you
+get started in the right direction.
+
+### Where can I ask general questions about Triton and Triton backends?
+
+Be sure to read all the information below as well as the [general
+Triton
+documentation](https://github.com/triton-inference-server/server#triton-inference-server)
+available in the main
+[server](https://github.com/triton-inference-server/server) repo. If
+you don't find your answer there you can ask questions on the main
+Triton [issues
+page](https://github.com/triton-inference-server/server/issues).
+
+### What versions of TensorFlow are supported by this backend?
+
+The TensorFlow backend supports both TensorFlow 1.x and 2.x. Each
+release of Triton will container support for a specific 1.x and 2.x
+version. You can find the specific version supported for any release
+by checking the Release Notes which are available from the main
+[server](https://github.com/triton-inference-server/server) repo.
+
+### How do I build the TensorFlow backend?
+
+See [build instructions](#build-the-tensorflow-backend) below.
+
+### Can I use any version of TensorFlow when building the backend?
+
+Currently you must use a version of TensorFlow from
+[NGC](ngc.nvidia.com). See [custom TensorFlow build
+instructions](#build-the-tensorflow-backend-with-custom-tensorflow)
+below.
+
+## Build the TensorFlow Backend
+
+Use a recent cmake to build. First install the required dependencies.
 
 ```
 $ apt-get install patchelf rapidjson-dev
 ```
 
 The backend can be built to support either TensorFlow 1.x or
-TensorFlow 2.x. As explained below in FIXME, an appropriate TensorFlow
-container from [NGC](ngc.nvidia.com) must be used. For example, to
-build a backend that uses the 20.08 version of the TensorFlow 1.x
-container from NGC:
+TensorFlow 2.x. An appropriate TensorFlow container from
+[NGC](ngc.nvidia.com) must be used. For example, to build a backend
+that uses the 20.08 version of the TensorFlow 1.x container from NGC:
 
 ```
 $ mkdir build
@@ -72,3 +108,35 @@ but the listed CMake argument can be used to override.
 * triton-inference-server/backend: -DTRITON_BACKEND_REPO_TAG=[tag]
 * triton-inference-server/core: -DTRITON_CORE_REPO_TAG=[tag]
 * triton-inference-server/common: -DTRITON_COMMON_REPO_TAG=[tag]
+
+## Build the TensorFlow Backend With Custom TensorFlow
+
+Currently, Triton requires that a specially patched version of
+TensorFlow be used with the TensorFlow backend. The full source for
+these TensorFlow versions are available as Docker images from
+[NGC](ngc.nvidia.com). For example, the TensorFlow 1.x version
+compatible with the 20.08 release of Triton is available as
+nvcr.io/nvidia/tensorflow:20.08-tf1-py3 and the TensorFlow 2.x version
+compatible with the 20.08 release of Triton is available as
+nvcr.io/nvidia/tensorflow:20.08-tf2-py3.
+
+You can modify and rebuild TensorFlow within these images to generate
+the shared libraries needed by the Triton TensorFlow backend. In the
+TensorFlow 1.x container you rebuild using:
+
+```
+$ ./nvbuild.sh --python3.6 --trtis
+```
+
+In the TensorFlow 2.x container you rebuild using:
+
+```
+$ ./nvbuild.sh --python3.6 --triton
+```
+
+After rebuilding within the container you should save the updated
+container as a new Docker image (for example, by using *docker
+commit*), and then build the backend as described
+[above](#build-the-tensorflow-backend) with
+TRITON\_TENSORFLOW\_DOCKER\_IMAGE set to refer to the new Docker
+image.
