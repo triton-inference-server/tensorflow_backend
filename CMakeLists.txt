@@ -31,17 +31,17 @@ project(tritontensorflowbackend LANGUAGES C CXX)
 #
 # Options
 #
-option(TRITON_ENABLE_GPU "Enable GPU support in backend" ON)
-option(TRITON_ENABLE_STATS "Include statistics collections in backend" ON)
-set(TRITON_TENSORFLOW_VERSION "1" CACHE STRING "TensorFlow version, must be '1' or '2'")
+option(TRITON_ENABLE_GPU "Enable GPU support in backend." ON)
+option(TRITON_ENABLE_STATS "Include statistics collections in backend." ON)
+set(TRITON_TENSORFLOW_VERSION "1" CACHE STRING "TensorFlow version, must be '1' or '2'.")
 set(TRITON_TENSORFLOW_DOCKER_IMAGE "nvcr.io/nvidia/tensorflow:20.08-tf1-py3" CACHE STRING
-    "Docker image containing the TensorFlow build required by backend")
-set(TRITON_TENSORFLOW_LIB_PATHS "" CACHE PATH "Paths to TensorFlow libraries. Multiple paths may be specified by separating them with semicolon")	
-set(TRITON_TENSORFLOW_INCLUDE_PATHS "" CACHE PATH "Paths to TensorFlow includes. Multiple paths may be specified by separating them with semicolon")	
+    "Docker image containing the TensorFlow build required by backend.")
+set(TRITON_TENSORFLOW_LIB_PATHS "" CACHE PATH "Paths to TensorFlow libraries. Multiple paths may be specified by separating them with a semicolon.")
+set(TRITON_TENSORFLOW_INCLUDE_PATHS "" CACHE PATH "Paths to TensorFlow includes. Multiple paths may be specified by separating them with a semicolon.")
 
-set(TRITON_BACKEND_REPO_TAG "main" CACHE STRING "Tag for triton-inference-server/backend repo")
-set(TRITON_CORE_REPO_TAG "main" CACHE STRING "Tag for triton-inference-server/core repo")
-set(TRITON_COMMON_REPO_TAG "main" CACHE STRING "Tag for triton-inference-server/common repo")
+set(TRITON_BACKEND_REPO_TAG "main" CACHE STRING "Tag for triton-inference-server/backend repo.")
+set(TRITON_CORE_REPO_TAG "main" CACHE STRING "Tag for triton-inference-server/core repo.")
+set(TRITON_COMMON_REPO_TAG "main" CACHE STRING "Tag for triton-inference-server/common repo.")
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
@@ -68,9 +68,9 @@ if (${TRITON_TENSORFLOW_DOCKER_BUILD})
     set(TRITON_TENSORFLOW_LIBNAME "libtensorflow_triton.so")
   endif()
 else()
-  set(TRITON_TENSORFLOW_LDFLAGS "-ltensorflow_trtis")	
+  set(TRITON_TENSORFLOW_LDFLAGS "-ltensorflow_trtis")
   if (${TRITON_TENSORFLOW_VERSION} EQUAL "2")
-    set(TRITON_TENSORFLOW_LDFLAGS "-ltensorflow_triton")	
+    set(TRITON_TENSORFLOW_LDFLAGS "-ltensorflow_triton")
   endif()
 endif() # TRITON_TENSORFLOW_DOCKER_BUILD
 
@@ -197,8 +197,8 @@ set_target_properties(
 )
 
 if (NOT ${TRITON_TENSORFLOW_DOCKER_BUILD})
-  FOREACH(p ${TRITON_TENSORFLOW_LIB_PATHS})	
-    set(TRITON_TENSORFLOW_LDFLAGS ${TRITON_TENSORFLOW_LDFLAGS} "-L${p}")	
+  FOREACH(p ${TRITON_TENSORFLOW_LIB_PATHS})
+    set(TRITON_TENSORFLOW_LDFLAGS ${TRITON_TENSORFLOW_LDFLAGS} "-L${p}")
   ENDFOREACH(p)
 endif() # !TRITON_TENSORFLOW_DOCKER_BUILD
 
@@ -256,7 +256,8 @@ if (${TRITON_TENSORFLOW_DOCKER_BUILD})
   install(
     CODE
       "EXECUTE_PROCESS(
-        COMMAND patchelf --set-rpath '$ORIGIN' ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}        COMMAND ln -sf ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_LIBNAME}
+        COMMAND patchelf --set-rpath '$ORIGIN' ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
+        COMMAND ln -sf ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_LIBNAME}
         COMMAND ln -sf ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} libtensorflow_framework.so.${TRITON_TENSORFLOW_VERSION}
         COMMAND ln -sf libtensorflow_framework.so.${TRITON_TENSORFLOW_VERSION} libtensorflow_framework.so
         COMMAND ln -sf ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} libtensorflow_cc.so.${TRITON_TENSORFLOW_VERSION}
