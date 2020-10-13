@@ -60,6 +60,13 @@ version. You can find the specific version supported for any release
 by checking the Release Notes which are available from the main
 [server](https://github.com/triton-inference-server/server) repo.
 
+### Is the TensorFlow backend configurable?
+
+Each model's configuration can enabled [TensorFlow-specific
+optimizations](https://github.com/triton-inference-server/server/blob/master/docs/optimization.md#framework-specific-optimization).
+There are also a few [command-line options](#command-line-options)
+that can be used to configure the backend when launching Triton.
+
 ### How do I build the TensorFlow backend?
 
 See [build instructions](#build-the-tensorflow-backend) below.
@@ -70,6 +77,28 @@ Currently you must use a version of TensorFlow from
 [NGC](ngc.nvidia.com). See [custom TensorFlow build
 instructions](#build-the-tensorflow-backend-with-custom-tensorflow)
 below.
+
+## Command-line Options
+
+The command-line options configure properties of the TensorFlow
+backend that are then applied to all models that use the backend.
+
+##### --backend-config=tensorflow,allow-soft-placement=\<boolean\>
+
+Instruct TensorFlow to use CPU implementation of an operation when a
+GPU implementation is not available.
+
+##### --backend-config=tensorflow,gpu-memory-fraction=\<float\>
+
+Reserve a portion of GPU memory for TensorFlow models. Default value
+0.0 indicates that TensorFlow should dynamically allocate memory as
+needed. Value of 1.0 indicates that TensorFlow should allocate all of
+GPU memory.
+
+##### --backend-config=tensorflow,version=\<int\>
+
+Select the version of the TensorFlow library to be used, available
+versions are 1 and 2. Default version is 1.
 
 ## Build the TensorFlow Backend
 
