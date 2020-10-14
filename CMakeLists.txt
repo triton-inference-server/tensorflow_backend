@@ -206,8 +206,9 @@ endif() # !TRITON_TENSORFLOW_DOCKER_BUILD
 target_link_libraries(
   triton-tensorflow-backend
   PRIVATE
-    triton-core-serverapi # from repo-core
-    triton-backend-utils  # from repo-backend
+    triton-core-serverapi   # from repo-core
+    triton-core-serverstub  # from repo-core
+    triton-backend-utils    # from repo-backend
 )
 
 if (${TRITON_TENSORFLOW_DOCKER_BUILD})
