@@ -41,48 +41,48 @@ namespace triton { namespace backend { namespace tensorflow {
 /// appropriate batch dimension.
 TRITONSERVER_Error* CompareDims(
     const std::string& model_name, const std::string& tensor_name,
-    const TRTISTF_Shape* model_shape, const std::vector<int64_t>& dims,
+    const TRITONTF_Shape* model_shape, const std::vector<int64_t>& dims,
     const bool supports_batching, const bool compare_exact);
 
 /// \return a named input/output tensor. Return nullptr if not found.
-const TRTISTF_IO* FindIOByName(
-    const TRTISTF_IOList* ios, const std::string& name);
+const TRITONTF_IO* FindIOByName(
+    const TRITONTF_IOList* ios, const std::string& name);
 
 // Convert a vector representing a shape to string representation.
 /// \param dims The vector of dimensions to be converted.
 /// \return String representation of the vector in pattern
 /// "[d0,d1,...,dn]"
 std::string ShapeToString(
-    const TRTISTF_Shape* model_shape, const size_t start_idx = 0);
+    const TRITONTF_Shape* model_shape, const size_t start_idx = 0);
 
 /// \return true if a TF data-type matches a model configuration
 /// data-type.
-bool CompareDataType(TRTISTF_DataType model_dtype, const std::string& dtype);
+bool CompareDataType(TRITONTF_DataType model_dtype, const std::string& dtype);
 
 /// \return the TRITONSERVER data-type that corresponds to a
-/// TRTISTF data-type.
-TRITONSERVER_DataType ConvertDataType(TRTISTF_DataType dtype);
+/// TRITONTF data-type.
+TRITONSERVER_DataType ConvertDataType(TRITONTF_DataType dtype);
 
-/// \return the model configuration data-type corresponding to a TRTISTF
+/// \return the model configuration data-type corresponding to a TRITONTF
 /// data-type.
-std::string ConvertToModelConfigString(TRTISTF_DataType dtype);
+std::string ConvertToModelConfigString(TRITONTF_DataType dtype);
 
-/// \return the TRTISTF data-type corresponding to a model
+/// \return the TRITONTF data-type corresponding to a model
 /// configuration data-type.
-TRTISTF_DataType ConvertDataType(const std::string& dtype);
+TRITONTF_DataType ConvertDataType(const std::string& dtype);
 
-/// \return the TRTISTF data-type corresponding to a model
+/// \return the TRITONTF data-type corresponding to a model
 /// configuration data-type.
-TRTISTF_DataType ConvertDataType(TRITONSERVER_DataType dtype);
+TRITONTF_DataType ConvertDataType(TRITONSERVER_DataType dtype);
 
-// If TRTISTF Error is non-OK, return the equivalent TRTIS status.
-#define RETURN_IF_TRTISTF_ERROR(TFWS)                                        \
+// If TRITONTF Error is non-OK, return the equivalent TRTIS status.
+#define RETURN_IF_TRITONTF_ERROR(TFWS)                                       \
   do {                                                                       \
-    TRTISTF_Error* error__ = (TFWS);                                         \
+    TRITONTF_Error* error__ = (TFWS);                                        \
     if (error__ != nullptr) {                                                \
       auto status =                                                          \
           TRITONSERVER_ErrorNew(TRITONSERVER_ERROR_INTERNAL, error__->msg_); \
-      TRTISTF_ErrorDelete(error__);                                          \
+      TRITONTF_ErrorDelete(error__);                                         \
       return status;                                                         \
     }                                                                        \
   } while (false)

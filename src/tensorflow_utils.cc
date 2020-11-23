@@ -33,7 +33,7 @@ namespace triton { namespace backend { namespace tensorflow {
 TRITONSERVER_Error*
 CompareDims(
     const std::string& model_name, const std::string& tensor_name,
-    const TRTISTF_Shape* model_shape, const std::vector<int64_t>& dims,
+    const TRITONTF_Shape* model_shape, const std::vector<int64_t>& dims,
     const bool supports_batching, const bool compare_exact)
 {
   // If the model configuration expects batching support in the model,
@@ -106,10 +106,10 @@ CompareDims(
   return nullptr;  // success
 }
 
-const TRTISTF_IO*
-FindIOByName(const TRTISTF_IOList* ios, const std::string& name)
+const TRITONTF_IO*
+FindIOByName(const TRITONTF_IOList* ios, const std::string& name)
 {
-  for (const TRTISTF_IOList* itr = ios; itr != nullptr; itr = itr->next_) {
+  for (const TRITONTF_IOList* itr = ios; itr != nullptr; itr = itr->next_) {
     if (itr->io_->name_ == name) {
       return itr->io_;
     }
@@ -119,7 +119,7 @@ FindIOByName(const TRTISTF_IOList* ios, const std::string& name)
 }
 
 std::string
-ShapeToString(const TRTISTF_Shape* shape, const size_t start_idx)
+ShapeToString(const TRITONTF_Shape* shape, const size_t start_idx)
 {
   std::string str("[");
   for (size_t idx = start_idx; idx < shape->rank_; idx++) {
@@ -135,10 +135,10 @@ ShapeToString(const TRTISTF_Shape* shape, const size_t start_idx)
 }
 
 bool
-CompareDataType(TRTISTF_DataType model_dtype, const std::string& dtype)
+CompareDataType(TRITONTF_DataType model_dtype, const std::string& dtype)
 {
   auto cdtype = ConvertDataType(dtype);
-  if (cdtype == TRTISTF_TYPE_INVALID) {
+  if (cdtype == TRITONTF_TYPE_INVALID) {
     return false;
   }
 
@@ -146,36 +146,36 @@ CompareDataType(TRTISTF_DataType model_dtype, const std::string& dtype)
 }
 
 TRITONSERVER_DataType
-ConvertDataType(TRTISTF_DataType dtype)
+ConvertDataType(TRITONTF_DataType dtype)
 {
   switch (dtype) {
-    case TRTISTF_DataType::TRTISTF_TYPE_INVALID:
+    case TRITONTF_DataType::TRITONTF_TYPE_INVALID:
       return TRITONSERVER_TYPE_INVALID;
-    case TRTISTF_DataType::TRTISTF_TYPE_BOOL:
+    case TRITONTF_DataType::TRITONTF_TYPE_BOOL:
       return TRITONSERVER_TYPE_BOOL;
-    case TRTISTF_DataType::TRTISTF_TYPE_UINT8:
+    case TRITONTF_DataType::TRITONTF_TYPE_UINT8:
       return TRITONSERVER_TYPE_UINT8;
-    case TRTISTF_DataType::TRTISTF_TYPE_UINT16:
+    case TRITONTF_DataType::TRITONTF_TYPE_UINT16:
       return TRITONSERVER_TYPE_UINT16;
-    case TRTISTF_DataType::TRTISTF_TYPE_UINT32:
+    case TRITONTF_DataType::TRITONTF_TYPE_UINT32:
       return TRITONSERVER_TYPE_UINT32;
-    case TRTISTF_DataType::TRTISTF_TYPE_UINT64:
+    case TRITONTF_DataType::TRITONTF_TYPE_UINT64:
       return TRITONSERVER_TYPE_UINT64;
-    case TRTISTF_DataType::TRTISTF_TYPE_INT8:
+    case TRITONTF_DataType::TRITONTF_TYPE_INT8:
       return TRITONSERVER_TYPE_INT8;
-    case TRTISTF_DataType::TRTISTF_TYPE_INT16:
+    case TRITONTF_DataType::TRITONTF_TYPE_INT16:
       return TRITONSERVER_TYPE_INT16;
-    case TRTISTF_DataType::TRTISTF_TYPE_INT32:
+    case TRITONTF_DataType::TRITONTF_TYPE_INT32:
       return TRITONSERVER_TYPE_INT32;
-    case TRTISTF_DataType::TRTISTF_TYPE_INT64:
+    case TRITONTF_DataType::TRITONTF_TYPE_INT64:
       return TRITONSERVER_TYPE_INT64;
-    case TRTISTF_DataType::TRTISTF_TYPE_FP16:
+    case TRITONTF_DataType::TRITONTF_TYPE_FP16:
       return TRITONSERVER_TYPE_FP16;
-    case TRTISTF_DataType::TRTISTF_TYPE_FP32:
+    case TRITONTF_DataType::TRITONTF_TYPE_FP32:
       return TRITONSERVER_TYPE_FP32;
-    case TRTISTF_DataType::TRTISTF_TYPE_FP64:
+    case TRITONTF_DataType::TRITONTF_TYPE_FP64:
       return TRITONSERVER_TYPE_FP64;
-    case TRTISTF_DataType::TRTISTF_TYPE_STRING:
+    case TRITONTF_DataType::TRITONTF_TYPE_STRING:
       return TRITONSERVER_TYPE_BYTES;
     default:
       break;
@@ -184,113 +184,113 @@ ConvertDataType(TRTISTF_DataType dtype)
   return TRITONSERVER_TYPE_INVALID;
 }
 
-TRTISTF_DataType
+TRITONTF_DataType
 ConvertDataType(const std::string& dtype)
 {
   if (dtype == "TYPE_INVALID") {
-    return TRTISTF_DataType::TRTISTF_TYPE_INVALID;
+    return TRITONTF_DataType::TRITONTF_TYPE_INVALID;
   } else if (dtype == "TYPE_BOOL") {
-    return TRTISTF_DataType::TRTISTF_TYPE_BOOL;
+    return TRITONTF_DataType::TRITONTF_TYPE_BOOL;
   } else if (dtype == "TYPE_UINT8") {
-    return TRTISTF_DataType::TRTISTF_TYPE_UINT8;
+    return TRITONTF_DataType::TRITONTF_TYPE_UINT8;
   } else if (dtype == "TYPE_UINT16") {
-    return TRTISTF_DataType::TRTISTF_TYPE_UINT16;
+    return TRITONTF_DataType::TRITONTF_TYPE_UINT16;
   } else if (dtype == "TYPE_UINT32") {
-    return TRTISTF_DataType::TRTISTF_TYPE_UINT32;
+    return TRITONTF_DataType::TRITONTF_TYPE_UINT32;
   } else if (dtype == "TYPE_UINT64") {
-    return TRTISTF_DataType::TRTISTF_TYPE_UINT64;
+    return TRITONTF_DataType::TRITONTF_TYPE_UINT64;
   } else if (dtype == "TYPE_INT8") {
-    return TRTISTF_DataType::TRTISTF_TYPE_INT8;
+    return TRITONTF_DataType::TRITONTF_TYPE_INT8;
   } else if (dtype == "TYPE_INT16") {
-    return TRTISTF_DataType::TRTISTF_TYPE_INT16;
+    return TRITONTF_DataType::TRITONTF_TYPE_INT16;
   } else if (dtype == "TYPE_INT32") {
-    return TRTISTF_DataType::TRTISTF_TYPE_INT32;
+    return TRITONTF_DataType::TRITONTF_TYPE_INT32;
   } else if (dtype == "TYPE_INT64") {
-    return TRTISTF_DataType::TRTISTF_TYPE_INT64;
+    return TRITONTF_DataType::TRITONTF_TYPE_INT64;
   } else if (dtype == "TYPE_FP16") {
-    return TRTISTF_DataType::TRTISTF_TYPE_FP16;
+    return TRITONTF_DataType::TRITONTF_TYPE_FP16;
   } else if (dtype == "TYPE_FP32") {
-    return TRTISTF_DataType::TRTISTF_TYPE_FP32;
+    return TRITONTF_DataType::TRITONTF_TYPE_FP32;
   } else if (dtype == "TYPE_FP64") {
-    return TRTISTF_DataType::TRTISTF_TYPE_FP64;
+    return TRITONTF_DataType::TRITONTF_TYPE_FP64;
   } else if (dtype == "TYPE_STRING") {
-    return TRTISTF_DataType::TRTISTF_TYPE_STRING;
+    return TRITONTF_DataType::TRITONTF_TYPE_STRING;
   }
-  return TRTISTF_DataType::TRTISTF_TYPE_INVALID;
+  return TRITONTF_DataType::TRITONTF_TYPE_INVALID;
 }
 
 std::string
-ConvertToModelConfigString(TRTISTF_DataType dtype)
+ConvertToModelConfigString(TRITONTF_DataType dtype)
 {
-  if (dtype == TRTISTF_DataType::TRTISTF_TYPE_INVALID) {
+  if (dtype == TRITONTF_DataType::TRITONTF_TYPE_INVALID) {
     return "TYPE_INVALID";
-  } else if (dtype == TRTISTF_DataType::TRTISTF_TYPE_BOOL) {
+  } else if (dtype == TRITONTF_DataType::TRITONTF_TYPE_BOOL) {
     return "TYPE_BOOL";
-  } else if (dtype == TRTISTF_DataType::TRTISTF_TYPE_UINT8) {
+  } else if (dtype == TRITONTF_DataType::TRITONTF_TYPE_UINT8) {
     return "TYPE_UINT8";
-  } else if (dtype == TRTISTF_DataType::TRTISTF_TYPE_UINT16) {
+  } else if (dtype == TRITONTF_DataType::TRITONTF_TYPE_UINT16) {
     return "TYPE_UINT16";
-  } else if (dtype == TRTISTF_DataType::TRTISTF_TYPE_UINT32) {
+  } else if (dtype == TRITONTF_DataType::TRITONTF_TYPE_UINT32) {
     return "TYPE_UINT32";
-  } else if (dtype == TRTISTF_DataType::TRTISTF_TYPE_UINT64) {
+  } else if (dtype == TRITONTF_DataType::TRITONTF_TYPE_UINT64) {
     return "TYPE_UINT64";
-  } else if (dtype == TRTISTF_DataType::TRTISTF_TYPE_INT8) {
+  } else if (dtype == TRITONTF_DataType::TRITONTF_TYPE_INT8) {
     return "TYPE_INT8";
-  } else if (dtype == TRTISTF_DataType::TRTISTF_TYPE_INT16) {
+  } else if (dtype == TRITONTF_DataType::TRITONTF_TYPE_INT16) {
     return "TYPE_INT16";
-  } else if (dtype == TRTISTF_DataType::TRTISTF_TYPE_INT32) {
+  } else if (dtype == TRITONTF_DataType::TRITONTF_TYPE_INT32) {
     return "TYPE_INT32";
-  } else if (dtype == TRTISTF_DataType::TRTISTF_TYPE_INT64) {
+  } else if (dtype == TRITONTF_DataType::TRITONTF_TYPE_INT64) {
     return "TYPE_INT64";
-  } else if (dtype == TRTISTF_DataType::TRTISTF_TYPE_FP16) {
+  } else if (dtype == TRITONTF_DataType::TRITONTF_TYPE_FP16) {
     return "TYPE_FP16";
-  } else if (dtype == TRTISTF_DataType::TRTISTF_TYPE_FP32) {
+  } else if (dtype == TRITONTF_DataType::TRITONTF_TYPE_FP32) {
     return "TYPE_FP32";
-  } else if (dtype == TRTISTF_DataType::TRTISTF_TYPE_FP64) {
+  } else if (dtype == TRITONTF_DataType::TRITONTF_TYPE_FP64) {
     return "TYPE_FP64";
-  } else if (dtype == TRTISTF_DataType::TRTISTF_TYPE_STRING) {
+  } else if (dtype == TRITONTF_DataType::TRITONTF_TYPE_STRING) {
     return "TYPE_STRING";
   }
   return "TYPE_INVALID";
 }
 
-TRTISTF_DataType
+TRITONTF_DataType
 ConvertDataType(TRITONSERVER_DataType dtype)
 {
   switch (dtype) {
     case TRITONSERVER_TYPE_INVALID:
-      return TRTISTF_DataType::TRTISTF_TYPE_INVALID;
+      return TRITONTF_DataType::TRITONTF_TYPE_INVALID;
     case TRITONSERVER_TYPE_BOOL:
-      return TRTISTF_DataType::TRTISTF_TYPE_BOOL;
+      return TRITONTF_DataType::TRITONTF_TYPE_BOOL;
     case TRITONSERVER_TYPE_UINT8:
-      return TRTISTF_DataType::TRTISTF_TYPE_UINT8;
+      return TRITONTF_DataType::TRITONTF_TYPE_UINT8;
     case TRITONSERVER_TYPE_UINT16:
-      return TRTISTF_DataType::TRTISTF_TYPE_UINT16;
+      return TRITONTF_DataType::TRITONTF_TYPE_UINT16;
     case TRITONSERVER_TYPE_UINT32:
-      return TRTISTF_DataType::TRTISTF_TYPE_UINT32;
+      return TRITONTF_DataType::TRITONTF_TYPE_UINT32;
     case TRITONSERVER_TYPE_UINT64:
-      return TRTISTF_DataType::TRTISTF_TYPE_UINT64;
+      return TRITONTF_DataType::TRITONTF_TYPE_UINT64;
     case TRITONSERVER_TYPE_INT8:
-      return TRTISTF_DataType::TRTISTF_TYPE_INT8;
+      return TRITONTF_DataType::TRITONTF_TYPE_INT8;
     case TRITONSERVER_TYPE_INT16:
-      return TRTISTF_DataType::TRTISTF_TYPE_INT16;
+      return TRITONTF_DataType::TRITONTF_TYPE_INT16;
     case TRITONSERVER_TYPE_INT32:
-      return TRTISTF_DataType::TRTISTF_TYPE_INT32;
+      return TRITONTF_DataType::TRITONTF_TYPE_INT32;
     case TRITONSERVER_TYPE_INT64:
-      return TRTISTF_DataType::TRTISTF_TYPE_INT64;
+      return TRITONTF_DataType::TRITONTF_TYPE_INT64;
     case TRITONSERVER_TYPE_FP16:
-      return TRTISTF_DataType::TRTISTF_TYPE_FP16;
+      return TRITONTF_DataType::TRITONTF_TYPE_FP16;
     case TRITONSERVER_TYPE_FP32:
-      return TRTISTF_DataType::TRTISTF_TYPE_FP32;
+      return TRITONTF_DataType::TRITONTF_TYPE_FP32;
     case TRITONSERVER_TYPE_FP64:
-      return TRTISTF_DataType::TRTISTF_TYPE_FP64;
+      return TRITONTF_DataType::TRITONTF_TYPE_FP64;
     case TRITONSERVER_TYPE_BYTES:
-      return TRTISTF_DataType::TRTISTF_TYPE_STRING;
+      return TRITONTF_DataType::TRITONTF_TYPE_STRING;
     default:
       break;
   }
 
-  return TRTISTF_DataType::TRTISTF_TYPE_INVALID;
+  return TRITONTF_DataType::TRITONTF_TYPE_INVALID;
 }
 
 }}}  // namespace triton::backend::tensorflow
