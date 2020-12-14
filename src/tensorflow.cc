@@ -236,7 +236,7 @@ ValidateSequenceControl(
           TRITONSERVER_ERROR_INVALID_ARG,
           std::string(
               "unable to load model '" + model_name + "', sequence control '" +
-              tensor_name + "': the model expects data-type " +
+              tensor_name + "': the model expects TYPE_" +
               TRITONSERVER_DataTypeString(ConvertDataType(input->data_type_)) +
               " but the model configuration specifies data-type " +
               tensor_datatype)
