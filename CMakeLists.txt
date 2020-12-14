@@ -63,15 +63,9 @@ elseif (NOT (${TRITON_TENSORFLOW_VERSION} EQUAL "1"))
 endif()
 
 if (${TRITON_TENSORFLOW_DOCKER_BUILD})
-  set(TRITON_TENSORFLOW_LIBNAME "libtensorflow_trtis.so")
-  if (${TRITON_TENSORFLOW_VERSION} EQUAL "2")
     set(TRITON_TENSORFLOW_LIBNAME "libtensorflow_triton.so")
-  endif()
 else()
-  set(TRITON_TENSORFLOW_LDFLAGS "-ltensorflow_trtis")
-  if (${TRITON_TENSORFLOW_VERSION} EQUAL "2")
     set(TRITON_TENSORFLOW_LDFLAGS "-ltensorflow_triton")
-  endif()
 endif() # TRITON_TENSORFLOW_DOCKER_BUILD
 
 #
