@@ -34,7 +34,7 @@ project(tritontensorflowbackend LANGUAGES C CXX)
 option(TRITON_ENABLE_GPU "Enable GPU support in backend." ON)
 option(TRITON_ENABLE_STATS "Include statistics collections in backend." ON)
 set(TRITON_TENSORFLOW_VERSION "1" CACHE STRING "TensorFlow version, must be '1' or '2'.")
-set(TRITON_TENSORFLOW_DOCKER_IMAGE "nvcr.io/nvidia/tensorflow:20.08-tf1-py3" CACHE STRING
+set(TRITON_TENSORFLOW_DOCKER_IMAGE "nvcr.io/nvidia/tensorflow:20.12-tf1-py3" CACHE STRING
     "Docker image containing the TensorFlow build required by backend.")
 set(TRITON_TENSORFLOW_LIB_PATHS "" CACHE PATH "Paths to TensorFlow libraries. Multiple paths may be specified by separating them with a semicolon.")
 set(TRITON_TENSORFLOW_INCLUDE_PATHS "" CACHE PATH "Paths to TensorFlow includes. Multiple paths may be specified by separating them with a semicolon.")
@@ -62,17 +62,8 @@ elseif (NOT (${TRITON_TENSORFLOW_VERSION} EQUAL "1"))
   message(FATAL_ERROR "TRITON_TENSORFLOW_VERSION allowed values are '1' and '2'")
 endif()
 
-if (${TRITON_TENSORFLOW_DOCKER_BUILD})
-  set(TRITON_TENSORFLOW_LIBNAME "libtensorflow_trtis.so")
-  if (${TRITON_TENSORFLOW_VERSION} EQUAL "2")
-    set(TRITON_TENSORFLOW_LIBNAME "libtensorflow_triton.so")
-  endif()
-else()
-  set(TRITON_TENSORFLOW_LDFLAGS "-ltensorflow_trtis")
-  if (${TRITON_TENSORFLOW_VERSION} EQUAL "2")
-    set(TRITON_TENSORFLOW_LDFLAGS "-ltensorflow_triton")
-  endif()
-endif() # TRITON_TENSORFLOW_DOCKER_BUILD
+set(TRITON_TENSORFLOW_LIBNAME "libtensorflow_triton.so")
+set(TRITON_TENSORFLOW_LDFLAGS "-ltensorflow_triton")
 
 #
 # Dependencies
