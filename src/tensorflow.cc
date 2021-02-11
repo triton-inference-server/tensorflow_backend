@@ -1208,8 +1208,8 @@ ModelInstanceState::Create(
         if (gpu_device == ModelInstanceState::NO_GPU_DEVICE) {
           LOG_MESSAGE(
               TRITONSERVER_LOG_WARN,
-              "GPU Execution Accelerator will be ignored on CPU backend "
-              "context");
+              "GPU Execution Accelerator will be ignored for model instance on "
+              "CPU");
         } else {
           triton::common::TritonJson::Value gpu_eas;
           if (eas.Find("gpu_execution_accelerator", &gpu_eas)) {
