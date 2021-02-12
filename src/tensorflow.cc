@@ -1204,86 +1204,89 @@ ModelInstanceState::Create(
             std::string("CPU Execution Accelerator is not supported in "
                         "TensorFlow backend"));
 
-        RETURN_ERROR_IF_TRUE(
-            gpu_device == ModelInstanceState::NO_GPU_DEVICE,
-            TRITONSERVER_ERROR_INVALID_ARG,
-            std::string(
-                "GPU Execution Accelerator can only be set on non-CPU backend "
-                "context"));
-
-        triton::common::TritonJson::Value gpu_eas;
-        if (eas.Find("gpu_execution_accelerator", &gpu_eas)) {
-          for (size_t ea_idx = 0; ea_idx < gpu_eas.ArraySize(); ea_idx++) {
-            triton::common::TritonJson::Value ea;
-            RETURN_IF_ERROR(gpu_eas.IndexAsObject(ea_idx, &ea));
-            std::string name;
-            RETURN_IF_ERROR(ea.MemberAsString("name", &name));
-            if (name == kTensorRTExecutionAccelerator) {
-              // Validate and set parameters
-              triton::common::TritonJson::Value params;
-              if (ea.Find("parameters", &params)) {
-                std::vector<std::string> param_keys;
-                RETURN_IF_ERROR(params.Members(&param_keys));
-                for (const auto& param_key : param_keys) {
-                  std::string value_string;
-                  if (param_key == "precision_mode") {
-                    RETURN_IF_ERROR(params.MemberAsString(
-                        param_key.c_str(), &value_string));
-                    if (value_string == "FP32") {
-                      tftrt_config.precision_mode_ = TRITONTF_MODE_FP32;
-                    } else if (value_string == "FP16") {
-                      tftrt_config.precision_mode_ = TRITONTF_MODE_FP16;
+        // GPU Execution Accelerator is disabled on CPU devices.
+        if (gpu_device == ModelInstanceState::NO_GPU_DEVICE) {
+          LOG_MESSAGE(
+              TRITONSERVER_LOG_WARN,
+              "GPU Execution Accelerator will be ignored for model instance on "
+              "CPU");
+        } else {
+          triton::common::TritonJson::Value gpu_eas;
+          if (eas.Find("gpu_execution_accelerator", &gpu_eas)) {
+            for (size_t ea_idx = 0; ea_idx < gpu_eas.ArraySize(); ea_idx++) {
+              triton::common::TritonJson::Value ea;
+              RETURN_IF_ERROR(gpu_eas.IndexAsObject(ea_idx, &ea));
+              std::string name;
+              RETURN_IF_ERROR(ea.MemberAsString("name", &name));
+              if (name == kTensorRTExecutionAccelerator) {
+                // Validate and set parameters
+                triton::common::TritonJson::Value params;
+                if (ea.Find("parameters", &params)) {
+                  std::vector<std::string> param_keys;
+                  RETURN_IF_ERROR(params.Members(&param_keys));
+                  for (const auto& param_key : param_keys) {
+                    std::string value_string;
+                    if (param_key == "precision_mode") {
+                      RETURN_IF_ERROR(params.MemberAsString(
+                          param_key.c_str(), &value_string));
+                      if (value_string == "FP32") {
+                        tftrt_config.precision_mode_ = TRITONTF_MODE_FP32;
+                      } else if (value_string == "FP16") {
+                        tftrt_config.precision_mode_ = TRITONTF_MODE_FP16;
+                      } else {
+                        RETURN_ERROR_IF_FALSE(
+                            false, TRITONSERVER_ERROR_INVALID_ARG,
+                            std::string("unsupported precision mode '") +
+                                value_string + "' is requested");
+                      }
+                    } else if (param_key == "minimum_segment_size") {
+                      RETURN_IF_ERROR(params.MemberAsString(
+                          param_key.c_str(), &value_string));
+                      RETURN_IF_ERROR(ParseLongLongValue(
+                          value_string, &tftrt_config.minimum_segment_size_));
+                    } else if (param_key == "max_workspace_size_bytes") {
+                      RETURN_IF_ERROR(params.MemberAsString(
+                          param_key.c_str(), &value_string));
+                      RETURN_IF_ERROR(ParseLongLongValue(
+                          value_string,
+                          &tftrt_config.max_workspace_size_bytes_));
+                    } else if (param_key == "max_cached_engines") {
+                      RETURN_IF_ERROR(params.MemberAsString(
+                          param_key.c_str(), &value_string));
+                      RETURN_IF_ERROR(ParseLongLongValue(
+                          value_string, &tftrt_config.max_cached_engines_));
                     } else {
-                      RETURN_ERROR_IF_FALSE(
-                          false, TRITONSERVER_ERROR_INVALID_ARG,
-                          std::string("unsupported precision mode '") +
-                              value_string + "' is requested");
+                      return TRITONSERVER_ErrorNew(
+                          TRITONSERVER_ERROR_INVALID_ARG,
+                          std::string(
+                              "unknown parameter '" + param_key +
+                              "' is provided for TensorRT Execution "
+                              "Accelerator")
+                              .c_str());
                     }
-                  } else if (param_key == "minimum_segment_size") {
-                    RETURN_IF_ERROR(params.MemberAsString(
-                        param_key.c_str(), &value_string));
-                    RETURN_IF_ERROR(ParseLongLongValue(
-                        value_string, &tftrt_config.minimum_segment_size_));
-                  } else if (param_key == "max_workspace_size_bytes") {
-                    RETURN_IF_ERROR(params.MemberAsString(
-                        param_key.c_str(), &value_string));
-                    RETURN_IF_ERROR(ParseLongLongValue(
-                        value_string, &tftrt_config.max_workspace_size_bytes_));
-                  } else if (param_key == "max_cached_engines") {
-                    RETURN_IF_ERROR(params.MemberAsString(
-                        param_key.c_str(), &value_string));
-                    RETURN_IF_ERROR(ParseLongLongValue(
-                        value_string, &tftrt_config.max_cached_engines_));
-                  } else {
-                    return TRITONSERVER_ErrorNew(
-                        TRITONSERVER_ERROR_INVALID_ARG,
-                        std::string(
-                            "unknown parameter '" + param_key +
-                            "' is provided for TensorRT Execution Accelerator")
-                            .c_str());
                   }
                 }
+                tftrt_config_ptr = &tftrt_config;
+                LOG_MESSAGE(
+                    TRITONSERVER_LOG_VERBOSE,
+                    (std::string("TensorRT Execution Accelerator is set for ") +
+                     (*state)->Name())
+                        .c_str());
+              } else if (name == kGPUIOExecutionAccelerator) {
+                // GPU I/O can be set, set hint
+                if ((gpu_device != ModelInstanceState::NO_GPU_DEVICE) &&
+                    (gpu_device != ModelInstanceState::MODEL_DEVICE)) {
+                  (*state)->input_device_id_ = gpu_device;
+                }
+              } else if (name == kAutoMixedPrecisionExecutionAccelerator) {
+                auto_mixed_precision = true;
+              } else {
+                return TRITONSERVER_ErrorNew(
+                    TRITONSERVER_ERROR_INVALID_ARG,
+                    (std::string("unknown Execution Accelerator '") + name +
+                     "' is requested")
+                        .c_str());
               }
-              tftrt_config_ptr = &tftrt_config;
-              LOG_MESSAGE(
-                  TRITONSERVER_LOG_VERBOSE,
-                  (std::string("TensorRT Execution Accelerator is set for ") +
-                   (*state)->Name())
-                      .c_str());
-            } else if (name == kGPUIOExecutionAccelerator) {
-              // GPU I/O can be set, set hint
-              if ((gpu_device != ModelInstanceState::NO_GPU_DEVICE) &&
-                  (gpu_device != ModelInstanceState::MODEL_DEVICE)) {
-                (*state)->input_device_id_ = gpu_device;
-              }
-            } else if (name == kAutoMixedPrecisionExecutionAccelerator) {
-              auto_mixed_precision = true;
-            } else {
-              return TRITONSERVER_ErrorNew(
-                  TRITONSERVER_ERROR_INVALID_ARG,
-                  (std::string("unknown Execution Accelerator '") + name +
-                   "' is requested")
-                      .c_str());
             }
           }
         }
