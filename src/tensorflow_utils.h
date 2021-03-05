@@ -26,6 +26,7 @@
 #pragma once
 
 #include "tensorflow_backend_tf.h"
+#include "triton/backend/backend_common.h"
 #include "triton/core/tritonserver.h"
 
 namespace triton { namespace backend { namespace tensorflow {
@@ -74,6 +75,17 @@ TRITONTF_DataType ConvertDataType(const std::string& dtype);
 /// \return the TRITONTF data-type corresponding to a model
 /// configuration data-type.
 TRITONTF_DataType ConvertDataType(TRITONSERVER_DataType dtype);
+
+TRITONSERVER_Error* ReadParameter(
+    triton::common::TritonJson::Value& params, const std::string& key,
+    std::string* param);
+TRITONSERVER_Error* ParseParameter(
+    const std::string& mkey, triton::common::TritonJson::Value& params,
+    bool* setting);
+TRITONSERVER_Error* ParseParameter(
+    const std::string& mkey, triton::common::TritonJson::Value& params,
+    int* setting);
+bool ConvertInt(const std::string& string_val, int* setting);
 
 // If TRITONTF Error is non-OK, return the equivalent TRTIS status.
 #define RETURN_IF_TRITONTF_ERROR(TFWS)                                       \

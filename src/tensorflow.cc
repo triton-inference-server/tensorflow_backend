@@ -737,6 +737,9 @@ class ModelState : public BackendModel {
   bool IsGraphdef() const { return is_graphdef_; }
   TRITONSERVER_Error* GetModel(
       const int device_id, const std::string& model_path, Model* model);
+  int NumIntraThreads() const { return num_intra_threads_; }
+  int NumInterThreads() const { return num_inter_threads_; }
+  int UsePerSessionThreads() const { return use_per_session_threads_; }
 
  private:
   TRITONSERVER_Error* CreateModel(
@@ -746,6 +749,9 @@ class ModelState : public BackendModel {
   // Auto-complete the model configuration
   TRITONSERVER_Error* AutoCompleteConfig();
 
+  // Parses the parameters in config
+  TRITONSERVER_Error* ParseParameters();
+
   // Validate that model configuration is supported by this backend.
   TRITONSERVER_Error* ValidateModelConfig();
 
@@ -753,6 +759,10 @@ class ModelState : public BackendModel {
   bool is_graphdef_;
   size_t max_session_share_count_;
   std::map<int, std::pair<size_t, Model>> models_;
+
+  int num_intra_threads_;
+  int num_inter_threads_;
+  bool use_per_session_threads_;
 };
 
 TRITONSERVER_Error*
@@ -908,7 +918,8 @@ ModelState::CreateModel(
   if (IsGraphdef()) {
     TRITONTF_Model* model = nullptr;
     RETURN_IF_TRITONTF_ERROR(TRITONTF_ModelCreateFromGraphDef(
-        &model, Name().c_str(), model_path.c_str(), device_id, has_graph_level,
+        &model, Name().c_str(), model_path.c_str(), device_id, model_state->NumIntraThreads(), model_state->NumInterThreads(),
+        model_state->UsePerSessionThreads(), has_graph_level,
         graph_level, BackendConfig()->allow_gpu_memory_growth_,
         BackendConfig()->per_process_gpu_memory_fraction_,
         BackendConfig()->allow_soft_placement_,
@@ -920,7 +931,8 @@ ModelState::CreateModel(
   } else {
     TRITONTF_Model* model = nullptr;
     RETURN_IF_TRITONTF_ERROR(TRITONTF_ModelCreateFromSavedModel(
-        &model, Name().c_str(), model_path.c_str(), device_id, has_graph_level,
+        &model, Name().c_str(), model_path.c_str(), device_id, model_state->NumIntraThreads(), model_state->NumInterThreads(),
+        model_state->UsePerSessionThreads(), has_graph_level,
         graph_level, BackendConfig()->allow_gpu_memory_growth_,
         BackendConfig()->per_process_gpu_memory_fraction_,
         BackendConfig()->allow_soft_placement_,
@@ -1004,12 +1016,14 @@ ModelState::Create(TRITONBACKEND_Model* triton_model, ModelState** state)
   }
 
   RETURN_IF_ERROR((*state)->ValidateModelConfig());
+  RETURN_IF_ERROR((*state)->ParseParameters());
 
   return nullptr;  // success
 }
 
 ModelState::ModelState(TRITONBACKEND_Model* triton_model)
-    : BackendModel(triton_model), max_session_share_count_(1)
+    : BackendModel(triton_model), max_session_share_count_(1), num_intra_threads_(0), num_inter_threads_(0),
+      use_per_session_threads_(false)
 {
   // Obtain backend configuration
   TRITONBACKEND_Backend* backend;
@@ -1308,7 +1322,8 @@ ModelState::AutoCompleteConfig()
     if (exists) {
       err = TRITONTF_ModelCreateFromSavedModel(
           &tritontf_model, Name().c_str(), model_path.c_str(),
-          TRITONTF_NO_GPU_DEVICE, false /* have_graph */, 0 /* graph_level */,
+          TRITONTF_NO_GPU_DEVICE, 0 /* num_intra_threads */,
+          0 /* num_inter_threads */, false /* have_graph */, 0 /* graph_level */,
           backend_config_->allow_gpu_memory_growth_,
           backend_config_->per_process_gpu_memory_fraction_,
           backend_config_->allow_soft_placement_,
@@ -1376,6 +1391,23 @@ ModelState::ValidateModelConfig()
   }
 
   return nullptr;  // success
+}
+
+TRITONSERVER_Error*
+ModelState::ParseParameters()
+{
+  // Validate and set parameters
+  triton::common::TritonJson::Value params;
+  if (model_config_.Find("parameters", &params)) {
+    RETURN_IF_ERROR(
+        ParseParameter("TF_NUM_INTRA_THREADS", params, &num_intra_threads_));
+    RETURN_IF_ERROR(
+        ParseParameter("TF_NUM_INTER_THREADS", params, &num_inter_threads_));
+    RETURN_IF_ERROR(ParseParameter(
+        "TF_USE_PER_SESSION_THREADS", params, &use_per_session_threads_));
+  }
+
+  return nullptr;
 }
 
 //
