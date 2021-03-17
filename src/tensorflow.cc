@@ -680,12 +680,37 @@ SetStringOutputBuffer(
 //
 class ModelState : public BackendModel {
  public:
+  // GPU device number that indicates that no gpu is available for a
+  // context (which is an invalid state since TensorRT requires a
+  // GPU).
+  static constexpr int NO_GPU_DEVICE = -1;
+
+  // GPU device number that indicates model will be loaded on GPUs
+  // as specified in model graph
+  static constexpr int MODEL_DEVICE = -2;
+
+  struct Model {
+    // Map from configuration name for an input to tensor name for
+    // that input in the model.
+    IONameMap input_name_map_;
+
+    // Map from configuration name for an output to tensor name for
+    // that output in the model.
+    IONameMap output_name_map_;
+
+    // The TRITONTFModel handle.
+    TRITONTF_Model* tritontf_model_;
+
+    // use for GPU allocator
+    int input_device_id_;
+  };
   static TRITONSERVER_Error* Create(
       TRITONBACKEND_Model* triton_model, ModelState** state);
   virtual ~ModelState() = default;
 
   BackendConfiguration* BackendConfig() const { return backend_config_; }
   bool IsGraphdef() const { return is_graphdef_; }
+  TRITONSERVER_Error* CreateModel(int device_id, const std::string& model_path, Model* model);
 
  private:
   ModelState(TRITONBACKEND_Model* triton_model);
@@ -698,7 +723,228 @@ class ModelState : public BackendModel {
 
   BackendConfiguration* backend_config_;
   bool is_graphdef_;
+  std::map<int, Model> models_;
+  std::vector<TRITONTFModelHandle> model_handles_;
 };
+
+TRITONSERVER_Error*
+ModelState::CreateModel(int device_id, const std::string& model_path, Model* model)
+{
+  // reuse existing model if it has been created on the device
+  auto it = models_.find(device_id);
+  if (it != models_.end()) {
+    *model = it->second;
+    return nullptr;  // success
+  }
+
+  Model lmodel;
+  TRITONTF_TFTRTConfig* tftrt_config_ptr = nullptr;
+  TRITONTF_TFTRTConfig tftrt_config;
+  bool auto_mixed_precision = false;
+  bool has_graph_level = false;
+  int64_t graph_level = 0;
+  {
+    triton::common::TritonJson::Value optimization;
+    if (ModelConfig().Find("optimization", &optimization)) {
+      {
+        triton::common::TritonJson::Value graph;
+        if ((has_graph_level = optimization.Find("graph", &graph))) {
+          RETURN_IF_ERROR(graph.MemberAsInt("level", &graph_level));
+        }
+      }
+      triton::common::TritonJson::Value eas;
+      if (optimization.Find("execution_accelerators", &eas)) {
+        // Set default values. is_dynamic_op is always true for online
+        // TF-TRT.
+        tftrt_config.minimum_segment_size_ = 3;
+        tftrt_config.max_workspace_size_bytes_ = 1 << 30;
+        tftrt_config.max_cached_engines_ = 100;
+        tftrt_config.max_batch_size_ = std::max(MaxBatchSize(), 1);
+        tftrt_config.precision_mode_ = TRITONTF_MODE_FP32;
+        tftrt_config.is_dynamic_op_ = true;
+
+        triton::common::TritonJson::Value cpu_eas;
+        RETURN_ERROR_IF_TRUE(
+            eas.Find("cpu_execution_accelerator", &cpu_eas) &&
+                (cpu_eas.ArraySize() != 0),
+            TRITONSERVER_ERROR_INVALID_ARG,
+            std::string("CPU Execution Accelerator is not supported in "
+                        "TensorFlow backend"));
+
+        // GPU Execution Accelerator is disabled on CPU devices.
+        if (device_id == ModelState::NO_GPU_DEVICE) {
+          LOG_MESSAGE(
+              TRITONSERVER_LOG_WARN,
+              "GPU Execution Accelerator will be ignored for model instance on "
+              "CPU");
+        } else {
+          triton::common::TritonJson::Value gpu_eas;
+          if (eas.Find("gpu_execution_accelerator", &gpu_eas)) {
+            for (size_t ea_idx = 0; ea_idx < gpu_eas.ArraySize(); ea_idx++) {
+              triton::common::TritonJson::Value ea;
+              RETURN_IF_ERROR(gpu_eas.IndexAsObject(ea_idx, &ea));
+              std::string name;
+              RETURN_IF_ERROR(ea.MemberAsString("name", &name));
+              if (name == kTensorRTExecutionAccelerator) {
+                // Validate and set parameters
+                triton::common::TritonJson::Value params;
+                if (ea.Find("parameters", &params)) {
+                  std::vector<std::string> param_keys;
+                  RETURN_IF_ERROR(params.Members(&param_keys));
+                  for (const auto& param_key : param_keys) {
+                    std::string value_string;
+                    if (param_key == "precision_mode") {
+                      RETURN_IF_ERROR(params.MemberAsString(
+                          param_key.c_str(), &value_string));
+                      if (value_string == "FP32") {
+                        tftrt_config.precision_mode_ = TRITONTF_MODE_FP32;
+                      } else if (value_string == "FP16") {
+                        tftrt_config.precision_mode_ = TRITONTF_MODE_FP16;
+                      } else {
+                        RETURN_ERROR_IF_FALSE(
+                            false, TRITONSERVER_ERROR_INVALID_ARG,
+                            std::string("unsupported precision mode '") +
+                                value_string + "' is requested");
+                      }
+                    } else if (param_key == "minimum_segment_size") {
+                      RETURN_IF_ERROR(params.MemberAsString(
+                          param_key.c_str(), &value_string));
+                      RETURN_IF_ERROR(ParseLongLongValue(
+                          value_string, &tftrt_config.minimum_segment_size_));
+                    } else if (param_key == "max_workspace_size_bytes") {
+                      RETURN_IF_ERROR(params.MemberAsString(
+                          param_key.c_str(), &value_string));
+                      RETURN_IF_ERROR(ParseLongLongValue(
+                          value_string,
+                          &tftrt_config.max_workspace_size_bytes_));
+                    } else if (param_key == "max_cached_engines") {
+                      RETURN_IF_ERROR(params.MemberAsString(
+                          param_key.c_str(), &value_string));
+                      RETURN_IF_ERROR(ParseLongLongValue(
+                          value_string, &tftrt_config.max_cached_engines_));
+                    } else {
+                      return TRITONSERVER_ErrorNew(
+                          TRITONSERVER_ERROR_INVALID_ARG,
+                          std::string(
+                              "unknown parameter '" + param_key +
+                              "' is provided for TensorRT Execution "
+                              "Accelerator")
+                              .c_str());
+                    }
+                  }
+                }
+                tftrt_config_ptr = &tftrt_config;
+                LOG_MESSAGE(
+                    TRITONSERVER_LOG_VERBOSE,
+                    (std::string("TensorRT Execution Accelerator is set for ") + Name())
+                        .c_str());
+              } else if (name == kGPUIOExecutionAccelerator) {
+                // GPU I/O can be set, set hint
+                if ((device_id != ModelState::NO_GPU_DEVICE) &&
+                    (device_id != ModelState::MODEL_DEVICE)) {
+                  lmodel.input_device_id_ = device_id;
+                }
+              } else if (name == kAutoMixedPrecisionExecutionAccelerator) {
+                auto_mixed_precision = true;
+              } else {
+                return TRITONSERVER_ErrorNew(
+                    TRITONSERVER_ERROR_INVALID_ARG,
+                    (std::string("unknown Execution Accelerator '") + name +
+                     "' is requested")
+                        .c_str());
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (auto_mixed_precision && (tftrt_config_ptr != nullptr)) {
+    return TRITONSERVER_ErrorNew(
+        TRITONSERVER_ERROR_INVALID_ARG,
+        "Auto mixed precision can not be set with TFTRT optimization");
+  }
+
+  TRITONTFModelHandle lmodel_handle(nullptr, TRITONTF_ModelDelete);
+  if (IsGraphdef()) {
+    TRITONTF_Model* model = nullptr;
+    RETURN_IF_TRITONTF_ERROR(TRITONTF_ModelCreateFromGraphDef(
+        &model, Name().c_str(), model_path.c_str(), device_id,
+        has_graph_level, graph_level,
+        BackendConfig()->allow_gpu_memory_growth_,
+        BackendConfig()->per_process_gpu_memory_fraction_,
+        BackendConfig()->allow_soft_placement_,
+        BackendConfig()->memory_limit_mb_, tftrt_config_ptr,
+        auto_mixed_precision));
+    lmodel_handle.reset(model);
+
+    RETURN_IF_ERROR(graphdef::ValidateTRITONTFModel(
+        Name(), ModelConfig(), model));
+  } else {
+    TRITONTF_Model* model = nullptr;
+    RETURN_IF_TRITONTF_ERROR(TRITONTF_ModelCreateFromSavedModel(
+        &model, Name().c_str(), model_path.c_str(), device_id,
+        has_graph_level, graph_level,
+        BackendConfig()->allow_gpu_memory_growth_,
+        BackendConfig()->per_process_gpu_memory_fraction_,
+        BackendConfig()->allow_soft_placement_,
+        BackendConfig()->memory_limit_mb_, tftrt_config_ptr,
+        auto_mixed_precision));
+    lmodel_handle.reset(model);
+
+    RETURN_IF_ERROR(savedmodel::ValidateTRITONTFModel(
+        Name(), ModelConfig(),
+        MaxBatchSize(), model, &(lmodel.input_name_map_),
+        &(lmodel.output_name_map_)));
+  }
+
+  if (lmodel.input_device_id_ != ModelState::MODEL_DEVICE) {
+    std::vector<const char*> input_names, output_names;
+    std::vector<TRITONTF_DataType> input_types, output_types;
+    std::deque<std::string> io_names;
+
+    triton::common::TritonJson::Value config_inputs;
+    RETURN_IF_ERROR(
+        ModelConfig().MemberAsArray("input", &config_inputs));
+    for (size_t i = 0; i < config_inputs.ArraySize(); i++) {
+      triton::common::TritonJson::Value io;
+      RETURN_IF_ERROR(config_inputs.IndexAsObject(i, &io));
+      io_names.emplace_back();
+      RETURN_IF_ERROR(io.MemberAsString("name", &io_names.back()));
+      std::string io_data_type;
+      RETURN_IF_ERROR(io.MemberAsString("data_type", &io_data_type));
+
+      input_names.push_back(io_names.back().c_str());
+      input_types.push_back(ConvertDataType(io_data_type));
+    }
+
+    triton::common::TritonJson::Value config_outputs;
+    RETURN_IF_ERROR(
+        ModelConfig().MemberAsArray("output", &config_outputs));
+    for (size_t i = 0; i < config_outputs.ArraySize(); i++) {
+      triton::common::TritonJson::Value io;
+      RETURN_IF_ERROR(config_outputs.IndexAsObject(i, &io));
+      io_names.emplace_back();
+      RETURN_IF_ERROR(io.MemberAsString("name", &io_names.back()));
+      std::string io_data_type;
+      RETURN_IF_ERROR(io.MemberAsString("data_type", &io_data_type));
+
+      output_names.push_back(io_names.back().c_str());
+      output_types.push_back(ConvertDataType(io_data_type));
+    }
+    RETURN_IF_TRITONTF_ERROR(TRITONTF_ModelMakeCallable(
+        lmodel_handle.get(), input_names.data(), input_types.data(),
+        config_inputs.ArraySize(), output_names.data(), output_types.data(),
+        config_outputs.ArraySize()));
+  }
+
+  lmodel.tritontf_model_ = lmodel_handle.get();
+  model_handles_.emplace_back(std::move(lmodel_handle));
+  models_[device_id] = lmodel;
+  *model = lmodel;
+  return nullptr;  // success
+}
 
 TRITONSERVER_Error*
 ModelState::Create(TRITONBACKEND_Model* triton_model, ModelState** state)
@@ -766,9 +1012,9 @@ ModelState::ModelState(TRITONBACKEND_Model* triton_model)
 // FIXME, where should just be methods in ModelState
 class AutoCompleteHelper {
  public:
-  AutoCompleteHelper(ModelState* model_state, TRITONTF_Model* trtistf_model)
+  AutoCompleteHelper(ModelState* model_state, TRITONTF_Model* tritontf_model)
       : model_state_(model_state),
-        trtistf_model_(trtistf_model, TRITONTF_ModelDelete)
+        tritontf_model_(tritontf_model, TRITONTF_ModelDelete)
   {
   }
 
@@ -782,7 +1028,7 @@ class AutoCompleteHelper {
 
   ModelState* model_state_;
   std::unique_ptr<TRITONTF_Model, decltype(&TRITONTF_ModelDelete)>
-      trtistf_model_;
+      tritontf_model_;
   bool model_support_batching_;
 };
 
@@ -794,11 +1040,11 @@ AutoCompleteHelper::Fix()
   RETURN_IF_ERROR(FixBatchingSupport());
 
   // Inputs
-  const TRITONTF_IOList* inputs = TRITONTF_ModelInputs(trtistf_model_.get());
+  const TRITONTF_IOList* inputs = TRITONTF_ModelInputs(tritontf_model_.get());
   RETURN_IF_ERROR(FixIOConfig(inputs, "input"));
 
   // Outputs
-  const TRITONTF_IOList* outputs = TRITONTF_ModelOutputs(trtistf_model_.get());
+  const TRITONTF_IOList* outputs = TRITONTF_ModelOutputs(tritontf_model_.get());
   RETURN_IF_ERROR(FixIOConfig(outputs, "output"));
 
   return nullptr;  // success
@@ -808,8 +1054,8 @@ TRITONSERVER_Error*
 AutoCompleteHelper::FixBatchingSupport()
 {
   std::vector<const TRITONTF_IOList*> model_ios{
-      TRITONTF_ModelInputs(trtistf_model_.get()),
-      TRITONTF_ModelOutputs(trtistf_model_.get())};
+      TRITONTF_ModelInputs(tritontf_model_.get()),
+      TRITONTF_ModelOutputs(tritontf_model_.get())};
 
   // Assume model doesn't support batching unless we see a batch
   // dimension (-1) on signature of every model input and output.
@@ -989,14 +1235,14 @@ ModelState::AutoCompleteConfig()
     auto model_path = JoinPath(
         {RepositoryPath(), std::to_string(Version()), default_model_filename});
 
-    TRITONTF_Model* trtistf_model = nullptr;
+    TRITONTF_Model* tritontf_model = nullptr;
     TRITONTF_Error* err = nullptr;
 
     bool exists;
     RETURN_IF_ERROR(FileExists(model_path, &exists));
     if (exists) {
       err = TRITONTF_ModelCreateFromSavedModel(
-          &trtistf_model, Name().c_str(), model_path.c_str(),
+          &tritontf_model, Name().c_str(), model_path.c_str(),
           TRITONTF_NO_GPU_DEVICE, false /* have_graph */, 0 /* graph_level */,
           backend_config_->allow_gpu_memory_growth_,
           backend_config_->per_process_gpu_memory_fraction_,
@@ -1015,7 +1261,7 @@ ModelState::AutoCompleteConfig()
               .c_str());
     }
 
-    auto ach = AutoCompleteHelper(this, trtistf_model);
+    auto ach = AutoCompleteHelper(this, tritontf_model);
     RETURN_IF_ERROR(ach.Fix());
   }
 
@@ -1075,15 +1321,6 @@ ModelState::ValidateModelConfig()
 //
 class ModelInstanceState : public BackendModelInstance {
  public:
-  // GPU device number that indicates that no gpu is available for a
-  // context (which is an invalid state since TensorRT requires a
-  // GPU).
-  static constexpr int NO_GPU_DEVICE = -1;
-
-  // GPU device number that indicates model will be loaded on GPUs
-  // as specified in model graph
-  static constexpr int MODEL_DEVICE = -2;
-
   static TRITONSERVER_Error* Create(
       ModelState* model_state,
       TRITONBACKEND_ModelInstance* triton_model_instance,
@@ -1102,20 +1339,8 @@ class ModelInstanceState : public BackendModelInstance {
       TRITONBACKEND_ModelInstance* triton_model_instance);
 
   ModelState* model_state_;
-
-  // Map from configuration name for an input to tensor name for
-  // that input in the model.
-  IONameMap input_name_map_;
-
-  // Map from configuration name for an output to tensor name for
-  // that output in the model.
-  IONameMap output_name_map_;
-
-  // TRITONTFModel for this context.
-  TRITONTFModelHandle trtistf_model_;
-
-  // use for GPU allocator
-  int input_device_id_;
+  // Model for this context.
+  ModelState::Model model_;
 };
 
 TRITONSERVER_Error*
@@ -1160,216 +1385,17 @@ ModelInstanceState::Create(
   int gpu_device;
   switch ((*state)->Kind()) {
     case TRITONSERVER_INSTANCEGROUPKIND_CPU:
-      gpu_device = ModelInstanceState::NO_GPU_DEVICE;
+      gpu_device = ModelState::NO_GPU_DEVICE;
       break;
     case TRITONSERVER_INSTANCEGROUPKIND_MODEL:
-      gpu_device = ModelInstanceState::MODEL_DEVICE;
+      gpu_device = ModelState::MODEL_DEVICE;
       break;
     default:
       gpu_device = (*state)->DeviceId();
       break;
   }
 
-  TRITONTF_TFTRTConfig* tftrt_config_ptr = nullptr;
-  TRITONTF_TFTRTConfig tftrt_config;
-  bool auto_mixed_precision = false;
-  bool has_graph_level = false;
-  int64_t graph_level = 0;
-  // [TODO] this can be moved one level above
-  {
-    triton::common::TritonJson::Value optimization;
-    if (model_state->ModelConfig().Find("optimization", &optimization)) {
-      {
-        triton::common::TritonJson::Value graph;
-        if ((has_graph_level = optimization.Find("graph", &graph))) {
-          RETURN_IF_ERROR(graph.MemberAsInt("level", &graph_level));
-        }
-      }
-      triton::common::TritonJson::Value eas;
-      if (optimization.Find("execution_accelerators", &eas)) {
-        // Set default values. is_dynamic_op is always true for online
-        // TF-TRT.
-        tftrt_config.minimum_segment_size_ = 3;
-        tftrt_config.max_workspace_size_bytes_ = 1 << 30;
-        tftrt_config.max_cached_engines_ = 100;
-        tftrt_config.max_batch_size_ = std::max(model_state->MaxBatchSize(), 1);
-        tftrt_config.precision_mode_ = TRITONTF_MODE_FP32;
-        tftrt_config.is_dynamic_op_ = true;
-
-        triton::common::TritonJson::Value cpu_eas;
-        RETURN_ERROR_IF_TRUE(
-            eas.Find("cpu_execution_accelerator", &cpu_eas) &&
-                (cpu_eas.ArraySize() != 0),
-            TRITONSERVER_ERROR_INVALID_ARG,
-            std::string("CPU Execution Accelerator is not supported in "
-                        "TensorFlow backend"));
-
-        // GPU Execution Accelerator is disabled on CPU devices.
-        if (gpu_device == ModelInstanceState::NO_GPU_DEVICE) {
-          LOG_MESSAGE(
-              TRITONSERVER_LOG_WARN,
-              "GPU Execution Accelerator will be ignored for model instance on "
-              "CPU");
-        } else {
-          triton::common::TritonJson::Value gpu_eas;
-          if (eas.Find("gpu_execution_accelerator", &gpu_eas)) {
-            for (size_t ea_idx = 0; ea_idx < gpu_eas.ArraySize(); ea_idx++) {
-              triton::common::TritonJson::Value ea;
-              RETURN_IF_ERROR(gpu_eas.IndexAsObject(ea_idx, &ea));
-              std::string name;
-              RETURN_IF_ERROR(ea.MemberAsString("name", &name));
-              if (name == kTensorRTExecutionAccelerator) {
-                // Validate and set parameters
-                triton::common::TritonJson::Value params;
-                if (ea.Find("parameters", &params)) {
-                  std::vector<std::string> param_keys;
-                  RETURN_IF_ERROR(params.Members(&param_keys));
-                  for (const auto& param_key : param_keys) {
-                    std::string value_string;
-                    if (param_key == "precision_mode") {
-                      RETURN_IF_ERROR(params.MemberAsString(
-                          param_key.c_str(), &value_string));
-                      if (value_string == "FP32") {
-                        tftrt_config.precision_mode_ = TRITONTF_MODE_FP32;
-                      } else if (value_string == "FP16") {
-                        tftrt_config.precision_mode_ = TRITONTF_MODE_FP16;
-                      } else {
-                        RETURN_ERROR_IF_FALSE(
-                            false, TRITONSERVER_ERROR_INVALID_ARG,
-                            std::string("unsupported precision mode '") +
-                                value_string + "' is requested");
-                      }
-                    } else if (param_key == "minimum_segment_size") {
-                      RETURN_IF_ERROR(params.MemberAsString(
-                          param_key.c_str(), &value_string));
-                      RETURN_IF_ERROR(ParseLongLongValue(
-                          value_string, &tftrt_config.minimum_segment_size_));
-                    } else if (param_key == "max_workspace_size_bytes") {
-                      RETURN_IF_ERROR(params.MemberAsString(
-                          param_key.c_str(), &value_string));
-                      RETURN_IF_ERROR(ParseLongLongValue(
-                          value_string,
-                          &tftrt_config.max_workspace_size_bytes_));
-                    } else if (param_key == "max_cached_engines") {
-                      RETURN_IF_ERROR(params.MemberAsString(
-                          param_key.c_str(), &value_string));
-                      RETURN_IF_ERROR(ParseLongLongValue(
-                          value_string, &tftrt_config.max_cached_engines_));
-                    } else {
-                      return TRITONSERVER_ErrorNew(
-                          TRITONSERVER_ERROR_INVALID_ARG,
-                          std::string(
-                              "unknown parameter '" + param_key +
-                              "' is provided for TensorRT Execution "
-                              "Accelerator")
-                              .c_str());
-                    }
-                  }
-                }
-                tftrt_config_ptr = &tftrt_config;
-                LOG_MESSAGE(
-                    TRITONSERVER_LOG_VERBOSE,
-                    (std::string("TensorRT Execution Accelerator is set for ") +
-                     (*state)->Name())
-                        .c_str());
-              } else if (name == kGPUIOExecutionAccelerator) {
-                // GPU I/O can be set, set hint
-                if ((gpu_device != ModelInstanceState::NO_GPU_DEVICE) &&
-                    (gpu_device != ModelInstanceState::MODEL_DEVICE)) {
-                  (*state)->input_device_id_ = gpu_device;
-                }
-              } else if (name == kAutoMixedPrecisionExecutionAccelerator) {
-                auto_mixed_precision = true;
-              } else {
-                return TRITONSERVER_ErrorNew(
-                    TRITONSERVER_ERROR_INVALID_ARG,
-                    (std::string("unknown Execution Accelerator '") + name +
-                     "' is requested")
-                        .c_str());
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  if (auto_mixed_precision && (tftrt_config_ptr != nullptr)) {
-    return TRITONSERVER_ErrorNew(
-        TRITONSERVER_ERROR_INVALID_ARG,
-        "Auto mixed precision can not be set with TFTRT optimization");
-  }
-
-  TRITONTF_Model* model = nullptr;
-  if (model_state->IsGraphdef()) {
-    RETURN_IF_TRITONTF_ERROR(TRITONTF_ModelCreateFromGraphDef(
-        &model, model_state->Name().c_str(), model_path.c_str(), gpu_device,
-        has_graph_level, graph_level,
-        model_state->BackendConfig()->allow_gpu_memory_growth_,
-        model_state->BackendConfig()->per_process_gpu_memory_fraction_,
-        model_state->BackendConfig()->allow_soft_placement_,
-        model_state->BackendConfig()->memory_limit_mb_, tftrt_config_ptr,
-        auto_mixed_precision));
-    (*state)->trtistf_model_.reset(model);
-
-    RETURN_IF_ERROR(graphdef::ValidateTRITONTFModel(
-        model_state->Name(), model_state->ModelConfig(), model));
-  } else {
-    RETURN_IF_TRITONTF_ERROR(TRITONTF_ModelCreateFromSavedModel(
-        &model, model_state->Name().c_str(), model_path.c_str(), gpu_device,
-        has_graph_level, graph_level,
-        model_state->BackendConfig()->allow_gpu_memory_growth_,
-        model_state->BackendConfig()->per_process_gpu_memory_fraction_,
-        model_state->BackendConfig()->allow_soft_placement_,
-        model_state->BackendConfig()->memory_limit_mb_, tftrt_config_ptr,
-        auto_mixed_precision));
-    (*state)->trtistf_model_.reset(model);
-
-    RETURN_IF_ERROR(savedmodel::ValidateTRITONTFModel(
-        model_state->Name(), model_state->ModelConfig(),
-        model_state->MaxBatchSize(), model, &((*state)->input_name_map_),
-        &((*state)->output_name_map_)));
-  }
-
-  if ((*state)->input_device_id_ != ModelInstanceState::MODEL_DEVICE) {
-    std::vector<const char*> input_names, output_names;
-    std::vector<TRITONTF_DataType> input_types, output_types;
-    std::deque<std::string> io_names;
-
-    triton::common::TritonJson::Value config_inputs;
-    RETURN_IF_ERROR(
-        model_state->ModelConfig().MemberAsArray("input", &config_inputs));
-    for (size_t i = 0; i < config_inputs.ArraySize(); i++) {
-      triton::common::TritonJson::Value io;
-      RETURN_IF_ERROR(config_inputs.IndexAsObject(i, &io));
-      io_names.emplace_back();
-      RETURN_IF_ERROR(io.MemberAsString("name", &io_names.back()));
-      std::string io_data_type;
-      RETURN_IF_ERROR(io.MemberAsString("data_type", &io_data_type));
-
-      input_names.push_back(io_names.back().c_str());
-      input_types.push_back(ConvertDataType(io_data_type));
-    }
-
-    triton::common::TritonJson::Value config_outputs;
-    RETURN_IF_ERROR(
-        model_state->ModelConfig().MemberAsArray("output", &config_outputs));
-    for (size_t i = 0; i < config_outputs.ArraySize(); i++) {
-      triton::common::TritonJson::Value io;
-      RETURN_IF_ERROR(config_outputs.IndexAsObject(i, &io));
-      io_names.emplace_back();
-      RETURN_IF_ERROR(io.MemberAsString("name", &io_names.back()));
-      std::string io_data_type;
-      RETURN_IF_ERROR(io.MemberAsString("data_type", &io_data_type));
-
-      output_names.push_back(io_names.back().c_str());
-      output_types.push_back(ConvertDataType(io_data_type));
-    }
-    RETURN_IF_TRITONTF_ERROR(TRITONTF_ModelMakeCallable(
-        (*state)->trtistf_model_.get(), input_names.data(), input_types.data(),
-        config_inputs.ArraySize(), output_names.data(), output_types.data(),
-        config_outputs.ArraySize()));
-  }
+  RETURN_IF_ERROR(model_state->CreateModel(gpu_device, model_path, &(*state)->model_));
 
   return nullptr;  // success
 }
@@ -1377,8 +1403,7 @@ ModelInstanceState::Create(
 ModelInstanceState::ModelInstanceState(
     ModelState* model_state, TRITONBACKEND_ModelInstance* triton_model_instance)
     : BackendModelInstance(model_state, triton_model_instance),
-      model_state_(model_state), trtistf_model_(nullptr, TRITONTF_ModelDelete),
-      input_device_id_(MODEL_DEVICE)
+      model_state_(model_state)
 {
 }
 
@@ -1535,8 +1560,8 @@ ModelInstanceState::ProcessRequests(
 
       // The name of the input in the model can be different...
       const char* input_tensor_name = name;
-      const auto& tn_itr = input_name_map_.find(input_tensor_name);
-      if (tn_itr != input_name_map_.end()) {
+      const auto& tn_itr = model_.input_name_map_.find(input_tensor_name);
+      if (tn_itr != model_.input_name_map_.end()) {
         input_tensor_name = tn_itr->second.c_str();
       }
 
@@ -1547,7 +1572,7 @@ ModelInstanceState::ProcessRequests(
       TRITONTF_Tensor* tensor = TRITONTF_TensorNew(
           input_tensor_name, ConvertDataType(datatype), batchn_shape.size(),
           (batchn_shape.size() == 0) ? nullptr : &batchn_shape[0],
-          input_device_id_);
+          model_.input_device_id_);
       if (tensor == nullptr) {
         auto err = TRITONSERVER_ErrorNew(
             TRITONSERVER_ERROR_INTERNAL,
@@ -1660,8 +1685,8 @@ ModelInstanceState::ProcessRequests(
     size_t oidx = 0;
     for (const auto& name : required_outputs) {
       model_output_names.push_back(name);
-      const auto& tn_itr = output_name_map_.find(name);
-      if (tn_itr == output_name_map_.end()) {
+      const auto& tn_itr = model_.output_name_map_.find(name);
+      if (tn_itr == model_.output_name_map_.end()) {
         output_names_cstr[oidx] = name.c_str();
       } else {
         output_names_cstr[oidx] = tn_itr->second.c_str();
@@ -1688,7 +1713,7 @@ ModelInstanceState::ProcessRequests(
     TRITONTF_TensorList* rtl = nullptr;
 
     TRITONTF_Error* tf_err = TRITONTF_ModelRun(
-        trtistf_model_.get(), *(input_tensors.release()),
+        model_.tritontf_model_, *(input_tensors.release()),
         required_outputs.size(), output_names_cstr, &rtl);
     if (tf_err != nullptr) {
       auto err =
