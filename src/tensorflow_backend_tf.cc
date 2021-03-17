@@ -530,6 +530,7 @@ ModelImpl::Run(
     const std::vector<std::string>& output_names,
     TRITONTF_TensorList** output_tensors)
 {
+  RETURN_IF_TF_ERROR(session_->Run({},{},{"init_all_vars_op"},nullptr));
   // I/O needs to be prepared differently for callable
   if (has_callable_) {
     std::vector<tensorflow::Tensor> tfinputs;
