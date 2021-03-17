@@ -690,6 +690,7 @@ class ModelState : public BackendModel {
   static constexpr int MODEL_DEVICE = -2;
 
   struct Model {
+    Model() : tritontf_model_(nullptr), input_device_id_(MODEL_DEVICE) {}
     // Map from configuration name for an input to tensor name for
     // that input in the model.
     IONameMap input_name_map_;
