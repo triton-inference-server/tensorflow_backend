@@ -680,9 +680,7 @@ SetStringOutputBuffer(
 //
 class ModelState : public BackendModel {
  public:
-  // GPU device number that indicates that no gpu is available for a
-  // context (which is an invalid state since TensorRT requires a
-  // GPU).
+  // GPU device number that indicates model will be loaded on CPU.
   static constexpr int NO_GPU_DEVICE = -1;
 
   // GPU device number that indicates model will be loaded on GPUs
