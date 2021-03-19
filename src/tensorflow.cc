@@ -711,7 +711,8 @@ class ModelState : public BackendModel {
 
   BackendConfiguration* BackendConfig() const { return backend_config_; }
   bool IsGraphdef() const { return is_graphdef_; }
-  TRITONSERVER_Error* CreateModel(int device_id, const std::string& model_path, Model* model);
+  TRITONSERVER_Error* CreateModel(
+      const int device_id, const std::string& model_path, Model* model);
 
  private:
   ModelState(TRITONBACKEND_Model* triton_model);
@@ -724,17 +725,20 @@ class ModelState : public BackendModel {
 
   BackendConfiguration* backend_config_;
   bool is_graphdef_;
-  std::map<int, Model> models_;
+  size_t max_session_share_count_;
+  std::map<int, std::pair<size_t, Model>> models_;
   std::vector<TRITONTFModelHandle> model_handles_;
 };
 
 TRITONSERVER_Error*
-ModelState::CreateModel(int device_id, const std::string& model_path, Model* model)
+ModelState::CreateModel(
+    int device_id, const std::string& model_path, Model* model)
 {
   // reuse existing model if it has been created on the device
   auto it = models_.find(device_id);
-  if (it != models_.end()) {
-    *model = it->second;
+  if ((it != models_.end()) && (it->second.first < max_session_share_count_)) {
+    *model = it->second.second;
+    ++it->second.first;
     return nullptr;  // success
   }
 
@@ -837,7 +841,8 @@ ModelState::CreateModel(int device_id, const std::string& model_path, Model* mod
                 tftrt_config_ptr = &tftrt_config;
                 LOG_MESSAGE(
                     TRITONSERVER_LOG_VERBOSE,
-                    (std::string("TensorRT Execution Accelerator is set for ") + Name())
+                    (std::string("TensorRT Execution Accelerator is set for ") +
+                     Name())
                         .c_str());
               } else if (name == kGPUIOExecutionAccelerator) {
                 // GPU I/O can be set, set hint
@@ -871,23 +876,21 @@ ModelState::CreateModel(int device_id, const std::string& model_path, Model* mod
   if (IsGraphdef()) {
     TRITONTF_Model* model = nullptr;
     RETURN_IF_TRITONTF_ERROR(TRITONTF_ModelCreateFromGraphDef(
-        &model, Name().c_str(), model_path.c_str(), device_id,
-        has_graph_level, graph_level,
-        BackendConfig()->allow_gpu_memory_growth_,
+        &model, Name().c_str(), model_path.c_str(), device_id, has_graph_level,
+        graph_level, BackendConfig()->allow_gpu_memory_growth_,
         BackendConfig()->per_process_gpu_memory_fraction_,
         BackendConfig()->allow_soft_placement_,
         BackendConfig()->memory_limit_mb_, tftrt_config_ptr,
         auto_mixed_precision));
     lmodel_handle.reset(model);
 
-    RETURN_IF_ERROR(graphdef::ValidateTRITONTFModel(
-        Name(), ModelConfig(), model));
+    RETURN_IF_ERROR(
+        graphdef::ValidateTRITONTFModel(Name(), ModelConfig(), model));
   } else {
     TRITONTF_Model* model = nullptr;
     RETURN_IF_TRITONTF_ERROR(TRITONTF_ModelCreateFromSavedModel(
-        &model, Name().c_str(), model_path.c_str(), device_id,
-        has_graph_level, graph_level,
-        BackendConfig()->allow_gpu_memory_growth_,
+        &model, Name().c_str(), model_path.c_str(), device_id, has_graph_level,
+        graph_level, BackendConfig()->allow_gpu_memory_growth_,
         BackendConfig()->per_process_gpu_memory_fraction_,
         BackendConfig()->allow_soft_placement_,
         BackendConfig()->memory_limit_mb_, tftrt_config_ptr,
@@ -895,8 +898,7 @@ ModelState::CreateModel(int device_id, const std::string& model_path, Model* mod
     lmodel_handle.reset(model);
 
     RETURN_IF_ERROR(savedmodel::ValidateTRITONTFModel(
-        Name(), ModelConfig(),
-        MaxBatchSize(), model, &(lmodel.input_name_map_),
+        Name(), ModelConfig(), MaxBatchSize(), model, &(lmodel.input_name_map_),
         &(lmodel.output_name_map_)));
   }
 
@@ -906,8 +908,7 @@ ModelState::CreateModel(int device_id, const std::string& model_path, Model* mod
     std::deque<std::string> io_names;
 
     triton::common::TritonJson::Value config_inputs;
-    RETURN_IF_ERROR(
-        ModelConfig().MemberAsArray("input", &config_inputs));
+    RETURN_IF_ERROR(ModelConfig().MemberAsArray("input", &config_inputs));
     for (size_t i = 0; i < config_inputs.ArraySize(); i++) {
       triton::common::TritonJson::Value io;
       RETURN_IF_ERROR(config_inputs.IndexAsObject(i, &io));
@@ -921,8 +922,7 @@ ModelState::CreateModel(int device_id, const std::string& model_path, Model* mod
     }
 
     triton::common::TritonJson::Value config_outputs;
-    RETURN_IF_ERROR(
-        ModelConfig().MemberAsArray("output", &config_outputs));
+    RETURN_IF_ERROR(ModelConfig().MemberAsArray("output", &config_outputs));
     for (size_t i = 0; i < config_outputs.ArraySize(); i++) {
       triton::common::TritonJson::Value io;
       RETURN_IF_ERROR(config_outputs.IndexAsObject(i, &io));
@@ -942,7 +942,7 @@ ModelState::CreateModel(int device_id, const std::string& model_path, Model* mod
 
   lmodel.tritontf_model_ = lmodel_handle.get();
   model_handles_.emplace_back(std::move(lmodel_handle));
-  models_[device_id] = lmodel;
+  models_[device_id] = std::make_pair(1, lmodel);
   *model = lmodel;
   return nullptr;  // success
 }
@@ -983,7 +983,7 @@ ModelState::Create(TRITONBACKEND_Model* triton_model, ModelState** state)
 }
 
 ModelState::ModelState(TRITONBACKEND_Model* triton_model)
-    : BackendModel(triton_model)
+    : BackendModel(triton_model), max_session_share_count_(1)
 {
   // Obtain backend configuration
   TRITONBACKEND_Backend* backend;
@@ -1007,6 +1007,34 @@ ModelState::ModelState(TRITONBACKEND_Model* triton_model)
                                          "model '" +
                                          Name() + "'")
                                             .c_str()));
+  }
+
+  // Validate and set parameters
+  triton::common::TritonJson::Value params;
+  if (model_config_.Find("parameters", &params)) {
+    std::string max_shared_str;
+    // This is optional, so it is okay to have error (not found)
+    auto err =
+        GetParameterValue(params, "MAX_SESSION_SHARE_COUNT", &max_shared_str);
+    if (err != nullptr) {
+      if (TRITONSERVER_ErrorCode(err) != TRITONSERVER_ERROR_NOT_FOUND) {
+        THROW_IF_BACKEND_MODEL_ERROR(err);
+      } else {
+        TRITONSERVER_ErrorDelete(err);
+      }
+    } else {
+      int max_shared = 0;
+      THROW_IF_BACKEND_MODEL_ERROR(ParseIntValue(max_shared_str, &max_shared));
+      if (max_shared <= 0) {
+        throw BackendModelException(TRITONSERVER_ErrorNew(
+            TRITONSERVER_ERROR_INVALID_ARG,
+            (std::string("parameter 'MAX_SESSION_SHARE_COUNT' must be positive "
+                         "number for TensorFlow model '") +
+             Name() + "'")
+                .c_str()));
+      }
+      max_session_share_count_ = max_shared;
+    }
   }
 }
 
@@ -1396,7 +1424,8 @@ ModelInstanceState::Create(
       break;
   }
 
-  RETURN_IF_ERROR(model_state->CreateModel(gpu_device, model_path, &(*state)->model_));
+  RETURN_IF_ERROR(
+      model_state->CreateModel(gpu_device, model_path, &(*state)->model_));
 
   return nullptr;  // success
 }
