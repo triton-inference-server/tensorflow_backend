@@ -54,8 +54,7 @@ using cudaStream_t = void*;
 #endif  // !TRITON_ENABLE_GPU
 
 using IONameMap = std::unordered_map<std::string, std::string>;
-using TRITONTFModelHandle =
-    std::unique_ptr<TRITONTF_Model, decltype(&TRITONTF_ModelDelete)>;
+using TRITONTFModelHandle = std::shared_ptr<TRITONTF_Model>;
 
 // BackendConfiguration
 struct BackendConfiguration {
@@ -698,7 +697,7 @@ class ModelState : public BackendModel {
     IONameMap output_name_map_;
 
     // The TRITONTFModel handle.
-    TRITONTF_Model* tritontf_model_;
+    TRITONTFModelHandle tritontf_model_;
 
     // use for GPU allocator
     int input_device_id_;
@@ -709,10 +708,12 @@ class ModelState : public BackendModel {
 
   BackendConfiguration* BackendConfig() const { return backend_config_; }
   bool IsGraphdef() const { return is_graphdef_; }
-  TRITONSERVER_Error* CreateModel(
+  TRITONSERVER_Error* GetModel(
       const int device_id, const std::string& model_path, Model* model);
 
  private:
+  TRITONSERVER_Error* CreateModel(
+      const int device_id, const std::string& model_path, Model* model);
   ModelState(TRITONBACKEND_Model* triton_model);
 
   // Auto-complete the model configuration
@@ -725,12 +726,10 @@ class ModelState : public BackendModel {
   bool is_graphdef_;
   size_t max_session_share_count_;
   std::map<int, std::pair<size_t, Model>> models_;
-  std::vector<TRITONTFModelHandle> model_handles_;
 };
 
 TRITONSERVER_Error*
-ModelState::CreateModel(
-    int device_id, const std::string& model_path, Model* model)
+ModelState::GetModel(int device_id, const std::string& model_path, Model* model)
 {
   // reuse existing model if it has been created on the device
   auto it = models_.find(device_id);
@@ -740,6 +739,15 @@ ModelState::CreateModel(
     return nullptr;  // success
   }
 
+  RETURN_IF_ERROR(CreateModel(device_id, model_path, model));
+  models_[device_id] = std::make_pair(1, *model);
+  return nullptr;  // success
+}
+
+TRITONSERVER_Error*
+ModelState::CreateModel(
+    int device_id, const std::string& model_path, Model* model)
+{
   Model lmodel;
   TRITONTF_TFTRTConfig* tftrt_config_ptr = nullptr;
   TRITONTF_TFTRTConfig tftrt_config;
@@ -870,7 +878,6 @@ ModelState::CreateModel(
         "Auto mixed precision can not be set with TFTRT optimization");
   }
 
-  TRITONTFModelHandle lmodel_handle(nullptr, TRITONTF_ModelDelete);
   if (IsGraphdef()) {
     TRITONTF_Model* model = nullptr;
     RETURN_IF_TRITONTF_ERROR(TRITONTF_ModelCreateFromGraphDef(
@@ -880,7 +887,7 @@ ModelState::CreateModel(
         BackendConfig()->allow_soft_placement_,
         BackendConfig()->memory_limit_mb_, tftrt_config_ptr,
         auto_mixed_precision));
-    lmodel_handle.reset(model);
+    lmodel.tritontf_model_.reset(model, TRITONTF_ModelDelete);
 
     RETURN_IF_ERROR(
         graphdef::ValidateTRITONTFModel(Name(), ModelConfig(), model));
@@ -893,7 +900,7 @@ ModelState::CreateModel(
         BackendConfig()->allow_soft_placement_,
         BackendConfig()->memory_limit_mb_, tftrt_config_ptr,
         auto_mixed_precision));
-    lmodel_handle.reset(model);
+    lmodel.tritontf_model_.reset(model, TRITONTF_ModelDelete);
 
     RETURN_IF_ERROR(savedmodel::ValidateTRITONTFModel(
         Name(), ModelConfig(), MaxBatchSize(), model, &(lmodel.input_name_map_),
@@ -933,16 +940,12 @@ ModelState::CreateModel(
       output_types.push_back(ConvertDataType(io_data_type));
     }
     RETURN_IF_TRITONTF_ERROR(TRITONTF_ModelMakeCallable(
-        lmodel_handle.get(), input_names.data(), input_types.data(),
+        lmodel.tritontf_model_.get(), input_names.data(), input_types.data(),
         config_inputs.ArraySize(), output_names.data(), output_types.data(),
         config_outputs.ArraySize()));
   }
-
-  lmodel.tritontf_model_ = lmodel_handle.get();
-  model_handles_.emplace_back(std::move(lmodel_handle));
-  models_[device_id] = std::make_pair(1, lmodel);
-  *model = lmodel;
-  return nullptr;  // success
+  *model = std::move(lmodel);
+  return nullptr;
 }
 
 TRITONSERVER_Error*
@@ -1423,7 +1426,7 @@ ModelInstanceState::Create(
   }
 
   RETURN_IF_ERROR(
-      model_state->CreateModel(gpu_device, model_path, &(*state)->model_));
+      model_state->GetModel(gpu_device, model_path, &(*state)->model_));
 
   return nullptr;  // success
 }
@@ -1741,7 +1744,7 @@ ModelInstanceState::ProcessRequests(
     TRITONTF_TensorList* rtl = nullptr;
 
     TRITONTF_Error* tf_err = TRITONTF_ModelRun(
-        model_.tritontf_model_, *(input_tensors.release()),
+        model_.tritontf_model_.get(), *(input_tensors.release()),
         required_outputs.size(), output_names_cstr, &rtl);
     if (tf_err != nullptr) {
       auto err =
