@@ -210,7 +210,9 @@ IsGPUFeedAndFetchSupported(TRITONTF_DataType dtype)
 void
 NewSessionOptions(
     const int num_intra_threads, const int num_inter_threads,
-    const bool use_per_session_threads, const bool has_graph_level,
+    const bool use_per_session_threads,
+    const std::vector<std::string>> &graph_tags,
+    const std::vector<std::string>> &signature_defs, const bool has_graph_level,
     const int graph_level, const bool allow_gpu_memory_growth,
     const float per_process_gpu_memory_fraction,
     const bool allow_soft_placement,
@@ -821,8 +823,9 @@ TRITONTF_ModelCreateFromGraphDef(
     TRITONTF_Model** trtistf_model, const char* model_name,
     const char* model_path, const int device_id, const int num_intra_threads,
     const int num_inter_threads, const bool use_per_session_threads,
-    const bool has_graph_level, const int graph_level,
-    const bool allow_gpu_memory_growth,
+    const std::vector<std::string>& graph_tags,
+    const std::vector<std::string>& signature_defs, const bool has_graph_level,
+    const int graph_level, const bool allow_gpu_memory_growth,
     const float per_process_gpu_memory_fraction,
     const bool allow_soft_placement,
     const std::map<int, std::vector<float>>& memory_limit_mb,
@@ -830,8 +833,8 @@ TRITONTF_ModelCreateFromGraphDef(
 {
   tensorflow::SessionOptions session_options;
   NewSessionOptions(
-      num_intra_threads, num_inter_threads, use_per_session_threads,
-      has_graph_level, graph_level, allow_gpu_memory_growth,
+      num_intra_threads, num_inter_threads, use_per_session_threads, graph_tags,
+      signature_defs, has_graph_level, graph_level, allow_gpu_memory_growth,
       per_process_gpu_memory_fraction, allow_soft_placement, memory_limit_mb,
       tftrt_config, auto_mixed_precision, &session_options);
 
@@ -903,7 +906,8 @@ TRITONTF_ModelCreateFromSavedModel(
     TRITONTF_Model** trtistf_model, const char* model_name,
     const char* model_path, const int device_id, const int num_intra_threads,
     const int num_inter_threads, const bool use_per_session_threads,
-    const std::vector<std::string>& signature_defs, const bool has_graph_level,
+    const std::vector<std::string>> &graph_tags,
+    const std::vector<std::string>> &signature_defs, const bool has_graph_level,
     const int graph_level, const bool allow_gpu_memory_growth,
     const float per_process_gpu_memory_fraction,
     const bool allow_soft_placement,
@@ -912,8 +916,8 @@ TRITONTF_ModelCreateFromSavedModel(
 {
   tensorflow::SessionOptions session_options;
   NewSessionOptions(
-      num_intra_threads, num_inter_threads, use_per_session_threads,
-      has_graph_level, graph_level, allow_gpu_memory_growth,
+      num_intra_threads, num_inter_threads, use_per_session_threads, graph_tags,
+      signature_defs, has_graph_level, graph_level, allow_gpu_memory_growth,
       per_process_gpu_memory_fraction, allow_soft_placement, memory_limit_mb,
       tftrt_config, auto_mixed_precision, &session_options);
 
