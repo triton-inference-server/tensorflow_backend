@@ -80,8 +80,11 @@ TRITONSERVER_Error* ParseParameter(
     triton::common::TritonJson::Value& params, const std::string& mkey,
     bool* value);
 TRITONSERVER_Error* ParseParameter(
-    triton::common::TritonJson::Value& params, const std::string& mkey,
-    int* value);
+    const std::string& mkey, triton::common::TritonJson::Value& params,
+    int* setting);
+TRITONSERVER_Error* ParseParameter(
+    const std::string& mkey, triton::common::TritonJson::Value& params,
+    std::vector<std::string>* setting);
 
 // If TRITONTF Error is non-OK, return the equivalent TRTIS status.
 #define RETURN_IF_TRITONTF_ERROR(TFWS)                                       \

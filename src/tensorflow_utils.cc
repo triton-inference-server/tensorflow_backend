@@ -25,10 +25,9 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "tensorflow_utils.h"
-#include <algorithm>
-
 #include "triton/backend/backend_common.h"
-
+#include <algorithm>
+#include <sstream> 
 namespace triton { namespace backend { namespace tensorflow {
 
 TRITONSERVER_Error*
@@ -315,6 +314,27 @@ ParseParameter(
   RETURN_IF_ERROR(GetParameterValue(params, mkey, &value_str));
   RETURN_IF_ERROR(ParseIntValue(value_str, value));
 
+  return nullptr;
+}
+
+TRITONSERVER_Error* ParseParameter(
+    const std::string& mkey, triton::common::TritonJson::Value& params,
+    std::vector<std::string>* setting) {
+    std::string value;
+    ReadParameter(params, mkey, &(value));
+    // remove all spaces
+    value.erase(std::remove_if(value.begin(), value.end(), std::isspace), value.end());
+    std::vector<std::string> valueVec;
+    std::stringstream ss(value);
+    while (ss.good()) {
+      std::string substr;
+      std::getline( ss, substr, ',' );
+      valueVec.push_back(substr);
+    }
+    RETURN_ERROR_IF_TRUE(valueVec.empty(), TRITONSERVER_ERROR_INVALID_ARG, "expected parameter not found");
+    if (!valueVec.empty()) {
+      *setting = valueVec;
+    }
   return nullptr;
 }
 

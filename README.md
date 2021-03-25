@@ -162,3 +162,40 @@ container as a new Docker image (for example, by using *docker
 commit*), and then build the backend as described
 [above](#build-the-tensorflow-backend) with
 TRITON_TENSORFLOW_DOCKER_IMAGE set to refer to the new Docker image.
+
+
+## Using the Tensorflow Backend
+### Parameters
+
+Configuration of Tensorflow for a model is done through the Parameters section of the model's 'config.pbtxt' file. The parameters and their description are as follows.
+
+* `TF_NUM_INTRA_THREADS`: Number of threads to use for inference on the CPU. Should be a non-negative number.
+* `TF_NUM_INTER_THREADS`: Number of threads to use for inference on the CPU. Should be a non-negative number.
+* `TF_USE_PER_SESSION_THREADS`: Boolean value to see if per session thread is used
+* `TF_GRAPH_TAG`: Tag(s) of the graphs to use.
+* `TF_SIGNITURE_DEFS`: Signature def(s) to uses
+
+
+The section of model config file specifying these parameters will look like:
+
+```
+.
+.
+.
+parameters: {
+key: "CPU_THROUGHPUT_STREAMS"
+value: {
+string_value:"auto"
+}
+}
+parameters: {
+key: "CPU_THREADS_NUM"
+value: {
+string_value:"5"
+}
+}
+.
+.
+.
+
+```
