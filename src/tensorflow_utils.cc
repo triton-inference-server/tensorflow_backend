@@ -25,9 +25,9 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "tensorflow_utils.h"
-#include "triton/backend/backend_common.h"
 #include <algorithm>
-#include <sstream> 
+#include <sstream>
+#include "triton/backend/backend_common.h"
 namespace triton { namespace backend { namespace tensorflow {
 
 TRITONSERVER_Error*
@@ -317,24 +317,29 @@ ParseParameter(
   return nullptr;
 }
 
-TRITONSERVER_Error* ParseParameter(
+TRITONSERVER_Error*
+ParseParameter(
     const std::string& mkey, triton::common::TritonJson::Value& params,
-    std::vector<std::string>* setting) {
-    std::string value;
-    ReadParameter(params, mkey, &(value));
-    // remove all spaces
-    value.erase(std::remove_if(value.begin(), value.end(), std::isspace), value.end());
-    std::vector<std::string> valueVec;
-    std::stringstream ss(value);
-    while (ss.good()) {
-      std::string substr;
-      std::getline( ss, substr, ',' );
-      valueVec.push_back(substr);
-    }
-    RETURN_ERROR_IF_TRUE(valueVec.empty(), TRITONSERVER_ERROR_INVALID_ARG, "expected parameter not found");
-    if (!valueVec.empty()) {
-      *setting = valueVec;
-    }
+    std::vector<std::string>* setting)
+{
+  std::string value;
+  ReadParameter(params, mkey, &(value));
+  // remove all spaces
+  value.erase(
+      std::remove_if(value.begin(), value.end(), std::isspace), value.end());
+  std::vector<std::string> valueVec;
+  std::stringstream ss(value);
+  while (ss.good()) {
+    std::string substr;
+    std::getline(ss, substr, ',');
+    valueVec.push_back(substr);
+  }
+  RETURN_ERROR_IF_TRUE(
+      valueVec.empty(), TRITONSERVER_ERROR_INVALID_ARG,
+      "expected parameter not found");
+  if (!valueVec.empty()) {
+    *setting = valueVec;
+  }
   return nullptr;
 }
 

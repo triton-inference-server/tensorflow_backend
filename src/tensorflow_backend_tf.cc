@@ -210,10 +210,7 @@ IsGPUFeedAndFetchSupported(TRITONTF_DataType dtype)
 void
 NewSessionOptions(
     const int num_intra_threads, const int num_inter_threads,
-    const bool use_per_session_threads, 
-    const std::vector<std::string>>& graph_tags,
-    const std::vector<std::string>>& signature_defs,
-    const bool has_graph_level,
+    const bool use_per_session_threads, const bool has_graph_level,
     const int graph_level, const bool allow_gpu_memory_growth,
     const float per_process_gpu_memory_fraction,
     const bool allow_soft_placement,
@@ -224,8 +221,6 @@ NewSessionOptions(
   session_options->config.set_intra_op_parallelism_threads(num_intra_threads);
   session_options->config.set_inter_op_parallelism_threads(num_inter_threads);
   session_options->config.set_use_per_session_threads(use_per_session_threads);
-  session_options->config.set_graph_tags(graph_tags);
-  session_options->config.set_signature_defs(signature_defs);
 
   session_options->config.mutable_gpu_options()->set_allow_growth(
       allow_gpu_memory_growth);
@@ -826,8 +821,6 @@ TRITONTF_ModelCreateFromGraphDef(
     TRITONTF_Model** trtistf_model, const char* model_name,
     const char* model_path, const int device_id, const int num_intra_threads,
     const int num_inter_threads, const bool use_per_session_threads,
-    const std::vector<std::string>& graph_tags,
-    const std::vector<std::string>& signature_defs,
     const bool has_graph_level, const int graph_level,
     const bool allow_gpu_memory_growth,
     const float per_process_gpu_memory_fraction,
@@ -838,7 +831,7 @@ TRITONTF_ModelCreateFromGraphDef(
   tensorflow::SessionOptions session_options;
   NewSessionOptions(
       num_intra_threads, num_inter_threads, use_per_session_threads,
-      graph_tags, signature_defs, has_graph_level, graph_level, allow_gpu_memory_growth,
+      has_graph_level, graph_level, allow_gpu_memory_growth,
       per_process_gpu_memory_fraction, allow_soft_placement, memory_limit_mb,
       tftrt_config, auto_mixed_precision, &session_options);
 
@@ -910,10 +903,8 @@ TRITONTF_ModelCreateFromSavedModel(
     TRITONTF_Model** trtistf_model, const char* model_name,
     const char* model_path, const int device_id, const int num_intra_threads,
     const int num_inter_threads, const bool use_per_session_threads,
-    const std::vector<std::string>>& graph_tags,
-    const std::vector<std::string>>& signature_defs,
-    const bool has_graph_level, const int graph_level,
-    const bool allow_gpu_memory_growth,
+    const std::vector<std::string>& signature_defs, const bool has_graph_level,
+    const int graph_level, const bool allow_gpu_memory_growth,
     const float per_process_gpu_memory_fraction,
     const bool allow_soft_placement,
     const std::map<int, std::vector<float>>& memory_limit_mb,
@@ -921,8 +912,7 @@ TRITONTF_ModelCreateFromSavedModel(
 {
   tensorflow::SessionOptions session_options;
   NewSessionOptions(
-      num_intra_threads, num_inter_threads, use_per_session_threads, 
-      graph_tags, signature_defs,
+      num_intra_threads, num_inter_threads, use_per_session_threads,
       has_graph_level, graph_level, allow_gpu_memory_growth,
       per_process_gpu_memory_fraction, allow_soft_placement, memory_limit_mb,
       tftrt_config, auto_mixed_precision, &session_options);
@@ -977,7 +967,9 @@ TRITONTF_ModelCreateFromSavedModel(
 
   // Verify that a "serving_default" signature exists, that is what
   // will be used to verify the inputs and outputs.
-  static const std::string DEFAULT_SERVING_SIGNATURE_DEF_KEY("serving_default");
+  // one signature def for now
+  static const std::string DEFAULT_SERVING_SIGNATURE_DEF_KEY =
+      signature_defs.size() > 0 ? signature_defs[0] : "serving_default";
   static const std::string INIT_OP_SIGNATURE_DEF_KEY("__saved_model_init_op");
   static const std::string TRAIN_OP_SIGNATURE_DEF_KEY("__saved_model_train_op");
   auto sig_itr = bundle->meta_graph_def.signature_def().find(
@@ -1008,7 +1000,7 @@ TRITONTF_ModelCreateFromSavedModel(
   TRITONTF_IOList* inputs = nullptr;
   for (const auto& sin : def.inputs()) {
     inputs = TRITONTF_IOListNew(
-      sin.first.c_str(), sin.second.name().c_str(), inputs);
+        sin.first.c_str(), sin.second.name().c_str(), inputs);
     TRITONTF_IO* io = inputs->io_;
 
     const TRITONTF_DataType dt = ConvertDataType(sin.second.dtype());
@@ -1136,8 +1128,8 @@ TRITONTF_ModelMakeCallable(
 
 TRITONTF_Error*
 TRITONTF_ModelRun(
-    TRITONTF_Model* model, TRITONTF_TensorList* input_tensors, 
-    size_t num_outputs, const char** output_names, 
+    TRITONTF_Model* model, TRITONTF_TensorList* input_tensors,
+    size_t num_outputs, const char** output_names,
     TRITONTF_TensorList** output_tensors)
 {
   ModelImpl* m = reinterpret_cast<ModelImpl*>(model);
