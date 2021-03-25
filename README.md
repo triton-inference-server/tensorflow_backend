@@ -111,22 +111,22 @@ $ apt-get install patchelf rapidjson-dev
 The backend can be built to support either TensorFlow 1.x or
 TensorFlow 2.x. An appropriate TensorFlow container from
 [NGC](ngc.nvidia.com) must be used. For example, to build a backend
-that uses the 20.12 version of the TensorFlow 1.x container from NGC:
+that uses the 21.02 version of the TensorFlow 1.x container from NGC:
 
 ```
 $ mkdir build
 $ cd build
-$ cmake -DCMAKE_INSTALL_PREFIX:PATH=`pwd`/install -DTRITON_TENSORFLOW_VERSION=1 -DTRITON_TENSORFLOW_DOCKER_IMAGE="nvcr.io/nvidia/tensorflow:20.12-tf1-py3" ..
+$ cmake -DCMAKE_INSTALL_PREFIX:PATH=`pwd`/install -DTRITON_TENSORFLOW_VERSION=1 -DTRITON_TENSORFLOW_DOCKER_IMAGE="nvcr.io/nvidia/tensorflow:21.02-tf1-py3" ..
 $ make install
 ```
 
-For example, to build a backend that uses the 20.12 version of the
+For example, to build a backend that uses the 21.02 version of the
 TensorFlow 2.x container from NGC:
 
 ```
 $ mkdir build
 $ cd build
-$ cmake -DCMAKE_INSTALL_PREFIX:PATH=`pwd`/install -DTRITON_TENSORFLOW_VERSION=2 -DTRITON_TENSORFLOW_DOCKER_IMAGE="nvcr.io/nvidia/tensorflow:20.12-tf2-py3" ..
+$ cmake -DCMAKE_INSTALL_PREFIX:PATH=`pwd`/install -DTRITON_TENSORFLOW_VERSION=2 -DTRITON_TENSORFLOW_DOCKER_IMAGE="nvcr.io/nvidia/tensorflow:21.02-tf2-py3" ..
 $ make install
 ```
 
@@ -144,10 +144,10 @@ Currently, Triton requires that a specially patched version of
 TensorFlow be used with the TensorFlow backend. The full source for
 these TensorFlow versions are available as Docker images from
 [NGC](ngc.nvidia.com). For example, the TensorFlow 1.x version
-compatible with the 20.12 release of Triton is available as
-nvcr.io/nvidia/tensorflow:20.12-tf1-py3 and the TensorFlow 2.x version
-compatible with the 20.12 release of Triton is available as
-nvcr.io/nvidia/tensorflow:20.12-tf2-py3.
+compatible with the 21.02 release of Triton is available as
+nvcr.io/nvidia/tensorflow:21.02-tf1-py3 and the TensorFlow 2.x version
+compatible with the 21.02 release of Triton is available as
+nvcr.io/nvidia/tensorflow:21.02-tf2-py3.
 
 You can modify and rebuild TensorFlow within these images to generate
 the shared libraries needed by the Triton TensorFlow backend. In the
