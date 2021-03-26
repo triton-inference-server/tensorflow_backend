@@ -1,4 +1,4 @@
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2020-2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -34,7 +34,7 @@ project(tritontensorflowbackend LANGUAGES C CXX)
 option(TRITON_ENABLE_GPU "Enable GPU support in backend." ON)
 option(TRITON_ENABLE_STATS "Include statistics collections in backend." ON)
 set(TRITON_TENSORFLOW_VERSION "1" CACHE STRING "TensorFlow version, must be '1' or '2'.")
-set(TRITON_TENSORFLOW_DOCKER_IMAGE "Docker image containing the TensorFlow build required by backend.")
+set(TRITON_TENSORFLOW_DOCKER_IMAGE "" CACHE STRING "Docker image containing the TensorFlow build required by backend.")
 set(TRITON_TENSORFLOW_LIB_PATHS "" CACHE PATH "Paths to TensorFlow libraries. Multiple paths may be specified by separating them with a semicolon.")
 set(TRITON_TENSORFLOW_INCLUDE_PATHS "" CACHE PATH "Paths to TensorFlow includes. Multiple paths may be specified by separating them with a semicolon.")
 
@@ -48,7 +48,7 @@ endif()
 
 set(TRITON_TENSORFLOW_DOCKER_BUILD OFF)
 if(TRITON_TENSORFLOW_LIB_PATHS STREQUAL "")
-  if (TRITON_TENSORFLOW_DOCKER_IMAGE)
+  if (TRITON_TENSORFLOW_DOCKER_IMAGE STREQUAL "")
     message(FATAL_ERROR "Using the Tensorflow docker based build requires TRITON_TENSORFLOW_DOCKER_IMAGE")
   endif()
   set(TRITON_TENSORFLOW_DOCKER_BUILD ON)
