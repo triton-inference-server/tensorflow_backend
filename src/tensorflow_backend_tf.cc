@@ -906,8 +906,8 @@ TRITONTF_ModelCreateFromSavedModel(
     TRITONTF_Model** trtistf_model, const char* model_name,
     const char* model_path, const int device_id, const int num_intra_threads,
     const int num_inter_threads, const bool use_per_session_threads,
-    const std::vector<std::string>> &graph_tags,
-    const std::vector<std::string>> &signature_defs, const bool has_graph_level,
+    const std::string& graph_tag, const std::string& signature_def,
+    const bool has_graph_level,
     const int graph_level, const bool allow_gpu_memory_growth,
     const float per_process_gpu_memory_fraction,
     const bool allow_soft_placement,
@@ -947,8 +947,11 @@ TRITONTF_ModelCreateFromSavedModel(
   std::unique_ptr<tensorflow::SavedModelBundle> bundle(
       new tensorflow::SavedModelBundle);
 
-  std::unordered_set<std::string> saved_model_tags;
-  saved_model_tags.insert(tensorflow::kSavedModelTagServe);
+ std::unordered_set<std::string> saved_model_tags;
+  static const std::string TAG_TO_USE = 
+      graph_tag.empty() ? tensorflow::kSavedModelTagServe : graph_tag;
+ saved_model_tags.insert(TAG_TO_USE);
+
 
   tensorflow::RunOptions run_options;
   RETURN_IF_TF_ERROR(tensorflow::LoadSavedModel(
@@ -958,7 +961,7 @@ TRITONTF_ModelCreateFromSavedModel(
   // Verify that the bundle has the "serve" tag
   bool found_serve_tag = false;
   for (const auto& tag : bundle->meta_graph_def.meta_info_def().tags()) {
-    if (tag == tensorflow::kSavedModelTagServe) {
+    if (tag == TAG_TO_USE) {
       found_serve_tag = true;
       break;
     }
@@ -966,14 +969,14 @@ TRITONTF_ModelCreateFromSavedModel(
   if (!found_serve_tag) {
     return TRITONTF_ErrorNew(
         "unable to load model '" + std::string(model_name) + "', expected '" +
-        tensorflow::kSavedModelTagServe + "' tag");
+        TAG_TO_USE + "' tag");
   }
 
   // Verify that a "serving_default" signature exists, that is what
   // will be used to verify the inputs and outputs.
   // one signature def for now
-  static const std::string DEFAULT_SERVING_SIGNATURE_DEF_KEY =
-      signature_defs.size() > 0 ? signature_defs[0] : "serving_default";
+  static const std::string DEFAULT_SERVING_SIGNATURE_DEF_KEY = 
+      signature_def.empty() ? "serving_default" : signature_def;
   static const std::string INIT_OP_SIGNATURE_DEF_KEY("__saved_model_init_op");
   static const std::string TRAIN_OP_SIGNATURE_DEF_KEY("__saved_model_train_op");
   auto sig_itr = bundle->meta_graph_def.signature_def().find(

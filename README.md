@@ -171,9 +171,9 @@ Configuration of Tensorflow for a model is done through the Parameters section o
 
 * `TF_NUM_INTRA_THREADS`: Number of threads to use for inference on the CPU. Should be a non-negative number.
 * `TF_NUM_INTER_THREADS`: Number of threads to use for inference on the CPU. Should be a non-negative number.
-* `TF_USE_PER_SESSION_THREADS`: Boolean value to see if per session thread is used
-* `TF_GRAPH_TAG`: Tag(s) of the graphs to use.
-* `TF_SIGNITURE_DEFS`: Signature def(s) to uses
+* `TF_USE_PER_SESSION_THREADS`: Boolean value to see if per session thread is used. "Yes" is accepted as true
+* `TF_GRAPH_TAG`: Tag of the graphs to use. See [protobuf here](https://github.com/tensorflow/tensorflow/blob/6f72753a66d6abab8b839cc263a9f1329861f6f9/tensorflow/core/protobuf/meta_graph.proto#L56)
+* `TF_SIGNITURE_DEFS`: Signature def to use. See [protobuf here](https://github.com/tensorflow/tensorflow/blob/6f72753a66d6abab8b839cc263a9f1329861f6f9/tensorflow/core/protobuf/meta_graph.proto#L260-L331)
 
 
 The section of model config file specifying these parameters will look like:

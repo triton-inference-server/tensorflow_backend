@@ -740,8 +740,8 @@ class ModelState : public BackendModel {
   int NumIntraThreads() const { return num_intra_threads_; }
   int NumInterThreads() const { return num_inter_threads_; }
   int UsePerSessionThreads() const { return use_per_session_threads_; }
-  std::vector<std::string> GraphTags() const { return graph_tags_; }
-  std::vector<std::string> SignatureDefs() const { return signature_defs_; }
+  std::string GraphTag() const { return graph_tag_; }
+  std::string SignatureDef() const { return signature_def_; }
 
  private:
   TRITONSERVER_Error* CreateModel(
@@ -765,7 +765,8 @@ class ModelState : public BackendModel {
   int num_intra_threads_;
   int num_inter_threads_;
   bool use_per_session_threads_;
-  std::vector<std::string> signature_defs_;
+  std::string graph_tag_ = "";
+  std::string signature_def_ = "";
 };
 
 TRITONSERVER_Error*
@@ -1454,7 +1455,9 @@ ModelState::ParseParameters()
         "TF_USE_PER_SESSION_THREADS", params, &use_per_session_threads_));
     RETURN_IF_ERROR(ParseParameter("TF_GRAPH_TAG", params, &graph_tags_));
     RETURN_IF_ERROR(
-        ParseParameter("TF_SIGNITURE_DEFS", params, &signature_defs_));
+        ParseParameter("TF_GRAPH_TAG", params, &graph_tag_));
+    RETURN_IF_ERROR(
+        ParseParameter("TF_SIGNITURE_DEF", params, &signature_def_));
   }
 
   return nullptr;
@@ -1679,8 +1682,7 @@ ModelInstanceState::Create(
   if (model_state->IsGraphdef()) {
     RETURN_IF_TRITONTF_ERROR(TRITONTF_ModelCreateFromGraphDef(
         &model, model_state->Name().c_str(), model_path.c_str(), gpu_device,
-        model_state->NumIntraThreads(), model_state->NumInterThreads(),
-        model_state->SignatureDefs(), has_graph_level, graph_level,
+        model_state->NumIntraThreads(), model_state->NumInterThreads(), has_graph_level, graph_level,
         model_state->BackendConfig()->allow_gpu_memory_growth_,
         model_state->BackendConfig()->per_process_gpu_memory_fraction_,
         model_state->BackendConfig()->allow_soft_placement_,
@@ -1694,8 +1696,8 @@ ModelInstanceState::Create(
     RETURN_IF_TRITONTF_ERROR(TRITONTF_ModelCreateFromSavedModel(
         &model, model_state->Name().c_str(), model_path.c_str(), gpu_device,
         model_state->NumIntraThreads(), model_state->NumInterThreads(),
-        model_state->UsePerSessionThreads(), model_state->GraphTags(),
-        model_state->SignatureDefs(), has_graph_level, graph_level,
+        model_state->UsePerSessionThreads(), model_state->GraphTag(),
+        model_state->SignatureDef(), has_graph_level, graph_level,
         model_state->BackendConfig()->allow_gpu_memory_growth_,
         model_state->BackendConfig()->per_process_gpu_memory_fraction_,
         model_state->BackendConfig()->allow_soft_placement_,

@@ -26,7 +26,6 @@
 
 #include "tensorflow_utils.h"
 #include <algorithm>
-#include <sstream>
 #include "triton/backend/backend_common.h"
 namespace triton { namespace backend { namespace tensorflow {
 
@@ -320,26 +319,20 @@ ParseParameter(
 TRITONSERVER_Error*
 ParseParameter(
     const std::string& mkey, triton::common::TritonJson::Value& params,
-    std::vector<std::string>* setting)
+    std::string* setting)
 {
-  std::string value;
+  std::string value; 
   ReadParameter(params, mkey, &(value));
   // remove all spaces
   value.erase(
       std::remove_if(value.begin(), value.end(), std::isspace), value.end());
-  std::vector<std::string> valueVec;
-  std::stringstream ss(value);
-  while (ss.good()) {
-    std::string substr;
-    std::getline(ss, substr, ',');
-    valueVec.push_back(substr);
+  std::transform(
+      value.begin(), value.end(), value.begin(),
+      [](unsigned char c) { return std::tolower(c); });
+  if (!value.empty()) {
+    *setting = value;
   }
-  RETURN_ERROR_IF_TRUE(
-      valueVec.empty(), TRITONSERVER_ERROR_INVALID_ARG,
-      "expected parameter not found");
-  if (!valueVec.empty()) {
-    *setting = valueVec;
-  }
+  
   return nullptr;
 }
 
