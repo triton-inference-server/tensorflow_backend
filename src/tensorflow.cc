@@ -1029,7 +1029,7 @@ ModelState::Create(TRITONBACKEND_Model* triton_model, ModelState** state)
 ModelState::ModelState(TRITONBACKEND_Model* triton_model)
     : BackendModel(triton_model), max_session_share_count_(1),
       num_intra_threads_(0), num_inter_threads_(0),
-      use_per_session_threads_(false)
+      use_per_session_threads_(false), graph_tag_("") , signature_def_("") 
 {
   // Obtain backend configuration
   TRITONBACKEND_Backend* backend;
@@ -1371,6 +1371,7 @@ ModelState::AutoCompleteConfig()
           &tritontf_model, Name().c_str(), model_path.c_str(),
           TRITONTF_NO_GPU_DEVICE, 0 /* num_intra_threads */,
           0 /* num_inter_threads */, false /* use_per_session_threads */,
+          "" /* graph_tag */, "" /* signature_def */,
           false /* have_graph */, 0 /* graph_level */,
           backend_config_->allow_gpu_memory_growth_,
           backend_config_->per_process_gpu_memory_fraction_,
@@ -1547,210 +1548,6 @@ ModelInstanceState::Create(
 
   RETURN_IF_ERROR(
       model_state->GetModel(gpu_device, model_path, &(*state)->model_));
-      
-  TRITONTF_TFTRTConfig* tftrt_config_ptr = nullptr;
-  TRITONTF_TFTRTConfig tftrt_config;
-  bool auto_mixed_precision = false;
-  bool has_graph_level = false;
-  int64_t graph_level = 0;
-  // [TODO] this can be moved one level above
-  {
-    triton::common::TritonJson::Value optimization;
-    if (model_state->ModelConfig().Find("optimization", &optimization)) {
-      {
-        triton::common::TritonJson::Value graph;
-        if ((has_graph_level = optimization.Find("graph", &graph))) {
-          RETURN_IF_ERROR(graph.MemberAsInt("level", &graph_level));
-        }
-      }
-      triton::common::TritonJson::Value eas;
-      if (optimization.Find("execution_accelerators", &eas)) {
-        // Set default values. is_dynamic_op is always true for online
-        // TF-TRT.
-        tftrt_config.minimum_segment_size_ = 3;
-        tftrt_config.max_workspace_size_bytes_ = 1 << 30;
-        tftrt_config.max_cached_engines_ = 100;
-        tftrt_config.max_batch_size_ = std::max(model_state->MaxBatchSize(), 1);
-        tftrt_config.precision_mode_ = TRITONTF_MODE_FP32;
-        tftrt_config.is_dynamic_op_ = true;
-
-        triton::common::TritonJson::Value cpu_eas;
-        RETURN_ERROR_IF_TRUE(
-            eas.Find("cpu_execution_accelerator", &cpu_eas) &&
-                (cpu_eas.ArraySize() != 0),
-            TRITONSERVER_ERROR_INVALID_ARG,
-            std::string("CPU Execution Accelerator is not supported in "
-                        "TensorFlow backend"));
-
-        // GPU Execution Accelerator is disabled on CPU devices.
-        if (gpu_device == ModelInstanceState::NO_GPU_DEVICE) {
-          LOG_MESSAGE(
-              TRITONSERVER_LOG_WARN,
-              "GPU Execution Accelerator will be ignored for model instance on "
-              "CPU");
-        } else {
-          triton::common::TritonJson::Value gpu_eas;
-          if (eas.Find("gpu_execution_accelerator", &gpu_eas)) {
-            for (size_t ea_idx = 0; ea_idx < gpu_eas.ArraySize(); ea_idx++) {
-              triton::common::TritonJson::Value ea;
-              RETURN_IF_ERROR(gpu_eas.IndexAsObject(ea_idx, &ea));
-              std::string name;
-              RETURN_IF_ERROR(ea.MemberAsString("name", &name));
-              if (name == kTensorRTExecutionAccelerator) {
-                // Validate and set parameters
-                triton::common::TritonJson::Value params;
-                if (ea.Find("parameters", &params)) {
-                  std::vector<std::string> param_keys;
-                  RETURN_IF_ERROR(params.Members(&param_keys));
-                  for (const auto& param_key : param_keys) {
-                    std::string value_string;
-                    if (param_key == "precision_mode") {
-                      RETURN_IF_ERROR(params.MemberAsString(
-                          param_key.c_str(), &value_string));
-                      if (value_string == "FP32") {
-                        tftrt_config.precision_mode_ = TRITONTF_MODE_FP32;
-                      } else if (value_string == "FP16") {
-                        tftrt_config.precision_mode_ = TRITONTF_MODE_FP16;
-                      } else {
-                        RETURN_ERROR_IF_FALSE(
-                            false, TRITONSERVER_ERROR_INVALID_ARG,
-                            std::string("unsupported precision mode '") +
-                                value_string + "' is requested");
-                      }
-                    } else if (param_key == "minimum_segment_size") {
-                      RETURN_IF_ERROR(params.MemberAsString(
-                          param_key.c_str(), &value_string));
-                      RETURN_IF_ERROR(ParseLongLongValue(
-                          value_string, &tftrt_config.minimum_segment_size_));
-                    } else if (param_key == "max_workspace_size_bytes") {
-                      RETURN_IF_ERROR(params.MemberAsString(
-                          param_key.c_str(), &value_string));
-                      RETURN_IF_ERROR(ParseLongLongValue(
-                          value_string,
-                          &tftrt_config.max_workspace_size_bytes_));
-                    } else if (param_key == "max_cached_engines") {
-                      RETURN_IF_ERROR(params.MemberAsString(
-                          param_key.c_str(), &value_string));
-                      RETURN_IF_ERROR(ParseLongLongValue(
-                          value_string, &tftrt_config.max_cached_engines_));
-                    } else {
-                      return TRITONSERVER_ErrorNew(
-                          TRITONSERVER_ERROR_INVALID_ARG,
-                          std::string(
-                              "unknown parameter '" + param_key +
-                              "' is provided for TensorRT Execution "
-                              "Accelerator")
-                              .c_str());
-                    }
-                  }
-                }
-                tftrt_config_ptr = &tftrt_config;
-                LOG_MESSAGE(
-                    TRITONSERVER_LOG_VERBOSE,
-                    (std::string("TensorRT Execution Accelerator is set for ") +
-                     (*state)->Name())
-                        .c_str());
-              } else if (name == kGPUIOExecutionAccelerator) {
-                // GPU I/O can be set, set hint
-                if ((gpu_device != ModelInstanceState::NO_GPU_DEVICE) &&
-                    (gpu_device != ModelInstanceState::MODEL_DEVICE)) {
-                  (*state)->input_device_id_ = gpu_device;
-                }
-              } else if (name == kAutoMixedPrecisionExecutionAccelerator) {
-                auto_mixed_precision = true;
-              } else {
-                return TRITONSERVER_ErrorNew(
-                    TRITONSERVER_ERROR_INVALID_ARG,
-                    (std::string("unknown Execution Accelerator '") + name +
-                     "' is requested")
-                        .c_str());
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  if (auto_mixed_precision && (tftrt_config_ptr != nullptr)) {
-    return TRITONSERVER_ErrorNew(
-        TRITONSERVER_ERROR_INVALID_ARG,
-        "Auto mixed precision can not be set with TFTRT optimization");
-  }
-
-  TRITONTF_Model* model = nullptr;
-  if (model_state->IsGraphdef()) {
-    RETURN_IF_TRITONTF_ERROR(TRITONTF_ModelCreateFromGraphDef(
-        &model, model_state->Name().c_str(), model_path.c_str(), gpu_device,
-        model_state->NumIntraThreads(), model_state->NumInterThreads(), has_graph_level, graph_level,
-        model_state->BackendConfig()->allow_gpu_memory_growth_,
-        model_state->BackendConfig()->per_process_gpu_memory_fraction_,
-        model_state->BackendConfig()->allow_soft_placement_,
-        model_state->BackendConfig()->memory_limit_mb_, tftrt_config_ptr,
-        auto_mixed_precision));
-    (*state)->trtistf_model_.reset(model);
-
-    RETURN_IF_ERROR(graphdef::ValidateTRITONTFModel(
-        model_state->Name(), model_state->ModelConfig(), model));
-  } else {
-    RETURN_IF_TRITONTF_ERROR(TRITONTF_ModelCreateFromSavedModel(
-        &model, model_state->Name().c_str(), model_path.c_str(), gpu_device,
-        model_state->NumIntraThreads(), model_state->NumInterThreads(),
-        model_state->UsePerSessionThreads(), model_state->GraphTag(),
-        model_state->SignatureDef(), has_graph_level, graph_level,
-        model_state->BackendConfig()->allow_gpu_memory_growth_,
-        model_state->BackendConfig()->per_process_gpu_memory_fraction_,
-        model_state->BackendConfig()->allow_soft_placement_,
-        model_state->BackendConfig()->memory_limit_mb_, tftrt_config_ptr,
-        auto_mixed_precision));
-    (*state)->trtistf_model_.reset(model);
-
-    RETURN_IF_ERROR(savedmodel::ValidateTRITONTFModel(
-        model_state->Name(), model_state->ModelConfig(),
-        model_state->MaxBatchSize(), model, &((*state)->input_name_map_),
-        &((*state)->output_name_map_)));
-  }
-
-  if ((*state)->input_device_id_ != ModelInstanceState::MODEL_DEVICE) {
-    std::vector<const char*> input_names, output_names;
-    std::vector<TRITONTF_DataType> input_types, output_types;
-    std::deque<std::string> io_names;
-
-    triton::common::TritonJson::Value config_inputs;
-    RETURN_IF_ERROR(
-        model_state->ModelConfig().MemberAsArray("input", &config_inputs));
-    for (size_t i = 0; i < config_inputs.ArraySize(); i++) {
-      triton::common::TritonJson::Value io;
-      RETURN_IF_ERROR(config_inputs.IndexAsObject(i, &io));
-      io_names.emplace_back();
-      RETURN_IF_ERROR(io.MemberAsString("name", &io_names.back()));
-      std::string io_data_type;
-      RETURN_IF_ERROR(io.MemberAsString("data_type", &io_data_type));
-
-      input_names.push_back(io_names.back().c_str());
-      input_types.push_back(ConvertDataType(io_data_type));
-    }
-
-    triton::common::TritonJson::Value config_outputs;
-    RETURN_IF_ERROR(
-        model_state->ModelConfig().MemberAsArray("output", &config_outputs));
-    for (size_t i = 0; i < config_outputs.ArraySize(); i++) {
-      triton::common::TritonJson::Value io;
-      RETURN_IF_ERROR(config_outputs.IndexAsObject(i, &io));
-      io_names.emplace_back();
-      RETURN_IF_ERROR(io.MemberAsString("name", &io_names.back()));
-      std::string io_data_type;
-      RETURN_IF_ERROR(io.MemberAsString("data_type", &io_data_type));
-
-      output_names.push_back(io_names.back().c_str());
-      output_types.push_back(ConvertDataType(io_data_type));
-    }
-    RETURN_IF_TRITONTF_ERROR(TRITONTF_ModelMakeCallable(
-        (*state)->trtistf_model_.get(), input_names.data(), input_types.data(),
-        config_inputs.ArraySize(), output_names.data(), output_types.data(),
-        config_outputs.ArraySize()));
-  }
-
   return nullptr;  // success
 }
 
