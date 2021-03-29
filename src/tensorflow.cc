@@ -1,4 +1,4 @@
-// Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+// Copyright (c) 2020-2021, NVIDIA CORPORATION. All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions
@@ -1185,6 +1185,15 @@ AutoCompleteHelper::FixBatchingSupport()
     mbs_value.SetInt(new_max_batch_size);
 
     model_state_->SetMaxBatchSize(new_max_batch_size);
+    if (model_support_batching_ == 1) {
+      LOG_MESSAGE(
+          TRITONSERVER_LOG_INFO,
+          (std::string("autofilled max_batch_size to 1 for model '") +
+           model_state_->Name() +
+           "' since batching is supporrted but no max_batch_size is specified "
+           "in model configuration")
+              .c_str());
+    }
   }
 
   return nullptr;  // success
