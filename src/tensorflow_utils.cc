@@ -25,6 +25,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "tensorflow_utils.h"
+#include <algorithm>
 
 #include "triton/backend/backend_common.h"
 
