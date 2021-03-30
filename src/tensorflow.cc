@@ -1187,11 +1187,12 @@ AutoCompleteHelper::FixBatchingSupport()
     model_state_->SetMaxBatchSize(new_max_batch_size);
     if (model_support_batching_ == 1) {
       LOG_MESSAGE(
-          TRITONSERVER_LOG_INFO,
+          TRITONSERVER_LOG_WARN,
           (std::string("autofilled max_batch_size to 1 for model '") +
            model_state_->Name() +
            "' since batching is supporrted but no max_batch_size is specified "
-           "in model configuration")
+           "in model configuration. Must specify max_batch_size to utilize "
+           "autofill with a larger max batch size")
               .c_str());
     }
   }
