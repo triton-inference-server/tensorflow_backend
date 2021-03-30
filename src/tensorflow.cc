@@ -233,10 +233,12 @@ ValidateSequenceControl(
     if (!CompareDataType(input->data_type_, tensor_datatype)) {
       return TRITONSERVER_ErrorNew(
           TRITONSERVER_ERROR_INVALID_ARG,
-          (std::string("unable to load model '") + model_name +
-           "', configuration expects datatype " + tensor_datatype +
-           " for sequence control '" + tensor_name + "', model provides TYPE_" +
-           TRITONSERVER_DataTypeString(ConvertDataType(input->data_type_)))
+          std::string(
+              "unable to load model '" + model_name + "', sequence control '" +
+              tensor_name + "': the model expects TYPE_" +
+              TRITONSERVER_DataTypeString(ConvertDataType(input->data_type_)) +
+              " but the model configuration specifies data-type " +
+              tensor_datatype)
               .c_str());
     }
   }
