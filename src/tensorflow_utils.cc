@@ -323,12 +323,6 @@ ParseParameter(
 {
   std::string value; 
   ReadParameter(params, mkey, &(value));
-  // remove all spaces
-  value.erase(
-      std::remove_if(value.begin(), value.end(), std::isspace), value.end());
-  std::transform(
-      value.begin(), value.end(), value.begin(),
-      [](unsigned char c) { return std::tolower(c); });
   if (!value.empty()) {
     *setting = value;
   }

@@ -1454,7 +1454,7 @@ ModelState::ParseParameters()
         ParseParameter("TF_NUM_INTER_THREADS", params, &num_inter_threads_));
     RETURN_IF_ERROR(ParseParameter(
         "TF_USE_PER_SESSION_THREADS", params, &use_per_session_threads_));
-    RETURN_IF_ERROR(ParseParameter("TF_GRAPH_TAG", params, &graph_tags_));
+    RETURN_IF_ERROR(ParseParameter("TF_GRAPH_TAG", params, &graph_tag_));
     RETURN_IF_ERROR(
         ParseParameter("TF_GRAPH_TAG", params, &graph_tag_));
     RETURN_IF_ERROR(
