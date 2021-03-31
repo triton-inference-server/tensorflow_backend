@@ -363,11 +363,10 @@ ValidateTRITONTFModel(
     if (!CompareDataType(input->data_type_, io_data_type)) {
       return TRITONSERVER_ErrorNew(
           TRITONSERVER_ERROR_INVALID_ARG,
-          std::string(
-              "unable to load model '" + model_name + "', input '" + io_name +
-              "' data-type " +
-              TRITONSERVER_DataTypeString(ConvertDataType(input->data_type_)) +
-              " doesn't match configuration data-type " + io_data_type)
+          (std::string("unable to load model '") + model_name +
+           "', configuration expects datatype " + io_data_type +
+           " for input '" + io_name + "', model provides TYPE_" +
+           TRITONSERVER_DataTypeString(ConvertDataType(input->data_type_)))
               .c_str());
     }
   }
@@ -420,11 +419,10 @@ ValidateTRITONTFModel(
     if (!CompareDataType(output->data_type_, io_data_type)) {
       return TRITONSERVER_ErrorNew(
           TRITONSERVER_ERROR_INVALID_ARG,
-          std::string(
-              "unable to load model '" + model_name + "', output '" + io_name +
-              "' data-type " +
-              TRITONSERVER_DataTypeString(ConvertDataType(output->data_type_)) +
-              " doesn't match configuration data-type " + io_data_type)
+          (std::string("unable to load model '") + model_name +
+           "', configuration expects datatype " + io_data_type +
+           " for output '" + io_name + "', model provides TYPE_" +
+           TRITONSERVER_DataTypeString(ConvertDataType(output->data_type_)))
               .c_str());
     }
   }
