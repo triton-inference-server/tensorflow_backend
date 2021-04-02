@@ -934,6 +934,11 @@ ModelState::CreateModel(
 
     RETURN_IF_ERROR(graphdef::ValidateTRITONTFModel(this, model));
   } else {
+      LOG_MESSAGE(
+      TRITONSERVER_LOG_WARN,
+      (std::string("TF_GRAPH_TAG ") + GraphTag() + 
+       std::string("TF_SIGNATURE_DEF ") + SignatureDef())
+          .c_str());
     TRITONTF_Model* model = nullptr;
     RETURN_IF_TRITONTF_ERROR(TRITONTF_ModelCreateFromSavedModel(
         &model, Name().c_str(), model_path.c_str(), device_id,
@@ -1455,8 +1460,12 @@ ModelState::ParseParameters()
     RETURN_IF_ERROR(ParseParameter(
         "TF_USE_PER_SESSION_THREADS", params, &use_per_session_threads_));
     RETURN_IF_ERROR(ParseParameter("TF_GRAPH_TAG", params, &graph_tag_));
-    RETURN_IF_ERROR(
-        ParseParameter("TF_SIGNATURE_DEF", params, &signature_def_));
+    RETURN_IF_ERROR(ParseParameter("TF_SIGNATURE_DEF", params, &signature_def_));
+    LOG_MESSAGE(
+      TRITONSERVER_LOG_WARN,
+      (std::string("TF_GRAPH_TAG ") + graph_tag_ + 
+       std::string("TF_SIGNATURE_DEF ") + signature_def_)
+          .c_str());
   }
 
   return nullptr;
