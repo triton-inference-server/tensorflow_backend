@@ -173,7 +173,7 @@ Configuration of Tensorflow for a model is done through the Parameters section o
 * `TF_NUM_INTER_THREADS`: Number of threads to use for inference on the CPU. Should be a non-negative number.
 * `TF_USE_PER_SESSION_THREADS`: Boolean value to see if per session thread is used. "Yes" is accepted as true
 * `TF_GRAPH_TAG`: Tag of the graphs to use. See [protobuf here](https://github.com/tensorflow/tensorflow/blob/6f72753a66d6abab8b839cc263a9f1329861f6f9/tensorflow/core/protobuf/meta_graph.proto#L56)
-* `TF_SIGNITURE_DEF`: Signature def to use. See [protobuf here](https://github.com/tensorflow/tensorflow/blob/6f72753a66d6abab8b839cc263a9f1329861f6f9/tensorflow/core/protobuf/meta_graph.proto#L260-L331)
+* `TF_SIGNATURE_DEF`: Signature def to use. See [protobuf here](https://github.com/tensorflow/tensorflow/blob/6f72753a66d6abab8b839cc263a9f1329861f6f9/tensorflow/core/protobuf/meta_graph.proto#L260-L331)
 
 
 The section of model config file specifying these parameters will look like:
@@ -197,13 +197,13 @@ string_value:"yes"
 parameters: {
 key: "TF_GRAPH_TAG"
 value: {
-string_value:"serve1"
+string_value: "serve1"
 }
 }
 parameters: {
-key: "TF_SIGNITURE_DEF"
+key: "TF_SIGNATURE_DEF"
 value: {
-string_value:"serving2"
+string_value: "serving2"
 }
 }
 .

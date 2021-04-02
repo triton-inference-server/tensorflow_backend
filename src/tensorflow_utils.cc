@@ -323,12 +323,12 @@ ParseParameter(
     const std::string& mkey, triton::common::TritonJson::Value& params,
     std::string* setting)
 {
-  std::string value; 
+  std::string value;
   ReadParameter(params, mkey, &(value));
   if (!value.empty()) {
     *setting = value;
   }
-  
+
   return nullptr;
 }
 

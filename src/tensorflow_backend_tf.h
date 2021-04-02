@@ -222,7 +222,7 @@ TRITONTF_EXPORT TRITONTF_Error* TRITONTF_ModelCreateFromGraphDef(
     TRITONTF_Model** trtistf_model, const char* model_name,
     const char* model_path, const int device_id, const int num_intra_threads,
     const int num_inter_threads, const bool use_per_session_threads,
-    const bool has_graph_level, const int graph_level, 
+    const bool has_graph_level, const int graph_level,
     const bool allow_gpu_memory_growth,
     const float per_process_gpu_memory_fraction,
     const bool allow_soft_placement,
@@ -235,9 +235,10 @@ TRITONTF_EXPORT TRITONTF_Error* TRITONTF_ModelCreateFromSavedModel(
     const char* model_path, const int device_id, const int num_intra_threads,
     const int num_inter_threads, const bool use_per_session_threads,
     const std::string& graph_tag, const std::string& signature_def,
-    const bool has_graph_level, const int graph_level, 
-    const bool allow_gpu_memory_growth, 
-    const float per_process_gpu_memory_fraction, const bool allow_soft_placement,
+    const bool has_graph_level, const int graph_level,
+    const bool allow_gpu_memory_growth,
+    const float per_process_gpu_memory_fraction,
+    const bool allow_soft_placement,
     const std::map<int, std::vector<float>>& memory_limit_mb,
     const TRITONTF_TFTRTConfig* tftrt_config, const bool auto_mixed_precision);
 

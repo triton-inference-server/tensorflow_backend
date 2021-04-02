@@ -210,8 +210,7 @@ IsGPUFeedAndFetchSupported(TRITONTF_DataType dtype)
 void
 NewSessionOptions(
     const int num_intra_threads, const int num_inter_threads,
-    const bool use_per_session_threads, 
-    const bool has_graph_level,
+    const bool use_per_session_threads, const bool has_graph_level,
     const int graph_level, const bool allow_gpu_memory_growth,
     const float per_process_gpu_memory_fraction,
     const bool allow_soft_placement,
@@ -945,10 +944,11 @@ TRITONTF_ModelCreateFromSavedModel(
   std::unique_ptr<tensorflow::SavedModelBundle> bundle(
       new tensorflow::SavedModelBundle);
 
-  // If user does not specify a 'tag' in the config.pbtx, use 'serve' as default
+  // If user does not specify a 'tag' in the configuration file, use 'serve' as
+  // default
   std::unordered_set<std::string> saved_model_tags;
-  static const std::string TAG_TO_USE = 
-      graph_tag.empty() ? tensorflow::kSavedModelTagServe : graph_tag; 
+  static const std::string TAG_TO_USE =
+      graph_tag.empty() ? tensorflow::kSavedModelTagServe : graph_tag;
   saved_model_tags.insert(TAG_TO_USE);
 
   tensorflow::RunOptions run_options;
@@ -970,14 +970,14 @@ TRITONTF_ModelCreateFromSavedModel(
         TAG_TO_USE + "' tag");
   }
 
-  // If user does not specify a 'signature_def' in the config.pbtx,
+  // If user does not specify a 'signature_def' in the configuration file,
   // then use "serving_default" as default
-  static const std::string DEFAULT_SERVING_SIGNATURE_DEF_KEY = 
+  static const std::string SIGNATURE_DEF_KEY_TO_USE =
       signature_def.empty() ? "serving_default" : signature_def;
   static const std::string INIT_OP_SIGNATURE_DEF_KEY("__saved_model_init_op");
   static const std::string TRAIN_OP_SIGNATURE_DEF_KEY("__saved_model_train_op");
-  auto sig_itr = bundle->meta_graph_def.signature_def().find(
-      DEFAULT_SERVING_SIGNATURE_DEF_KEY);
+  auto sig_itr =
+      bundle->meta_graph_def.signature_def().find(SIGNATURE_DEF_KEY_TO_USE);
   if (sig_itr == bundle->meta_graph_def.signature_def().end()) {
     // If default serving signature_def key is not found, maybe it is named
     // something else, use one that is neither init_op key nor train_op key
@@ -986,15 +986,15 @@ TRITONTF_ModelCreateFromSavedModel(
       if ((sig_itr->first != INIT_OP_SIGNATURE_DEF_KEY) &&
           (sig_itr->first != TRAIN_OP_SIGNATURE_DEF_KEY)) {
         LOG(WARNING) << "unable to find serving signature '"
-                     << DEFAULT_SERVING_SIGNATURE_DEF_KEY
-                     << "', using signature '" << sig_itr->first << "'";
+                     << SIGNATURE_DEF_KEY_TO_USE << "', using signature '"
+                     << sig_itr->first << "'";
         break;
       }
     }
     if (sig_itr == bundle->meta_graph_def.signature_def().end()) {
       return TRITONTF_ErrorNew(
           "unable to load model '" + std::string(model_name) + "', expected '" +
-          DEFAULT_SERVING_SIGNATURE_DEF_KEY + "' signature");
+          SIGNATURE_DEF_KEY_TO_USE + "' signature");
     }
   }
 
@@ -1004,7 +1004,7 @@ TRITONTF_ModelCreateFromSavedModel(
   TRITONTF_IOList* inputs = nullptr;
   for (const auto& sin : def.inputs()) {
     inputs = TRITONTF_IOListNew(
-      sin.first.c_str(), sin.second.name().c_str(), inputs);
+        sin.first.c_str(), sin.second.name().c_str(), inputs);
     TRITONTF_IO* io = inputs->io_;
 
     const TRITONTF_DataType dt = ConvertDataType(sin.second.dtype());
@@ -1132,7 +1132,7 @@ TRITONTF_ModelMakeCallable(
 
 TRITONTF_Error*
 TRITONTF_ModelRun(
-    TRITONTF_Model* model, TRITONTF_TensorList* input_tensors, 
+    TRITONTF_Model* model, TRITONTF_TensorList* input_tensors,
     size_t num_outputs, const char** output_names,
     TRITONTF_TensorList** output_tensors)
 {

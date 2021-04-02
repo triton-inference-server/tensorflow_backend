@@ -937,8 +937,9 @@ ModelState::CreateModel(
     TRITONTF_Model* model = nullptr;
     RETURN_IF_TRITONTF_ERROR(TRITONTF_ModelCreateFromSavedModel(
         &model, Name().c_str(), model_path.c_str(), device_id,
-        NumIntraThreads(), NumInterThreads(), UsePerSessionThreads(), GraphTag(),
-        SignatureDef(), has_graph_level, graph_level, BackendConfig()->allow_gpu_memory_growth_,
+        NumIntraThreads(), NumInterThreads(), UsePerSessionThreads(),
+        GraphTag(), SignatureDef(), has_graph_level, graph_level,
+        BackendConfig()->allow_gpu_memory_growth_,
         BackendConfig()->per_process_gpu_memory_fraction_,
         BackendConfig()->allow_soft_placement_,
         BackendConfig()->memory_limit_mb_, tftrt_config_ptr,
@@ -1029,7 +1030,7 @@ ModelState::Create(TRITONBACKEND_Model* triton_model, ModelState** state)
 ModelState::ModelState(TRITONBACKEND_Model* triton_model)
     : BackendModel(triton_model), max_session_share_count_(1),
       num_intra_threads_(0), num_inter_threads_(0),
-      use_per_session_threads_(false), graph_tag_("") , signature_def_("") 
+      use_per_session_threads_(false), graph_tag_(""), signature_def_("")
 {
   // Obtain backend configuration
   TRITONBACKEND_Backend* backend;
@@ -1371,9 +1372,8 @@ ModelState::AutoCompleteConfig()
           &tritontf_model, Name().c_str(), model_path.c_str(),
           TRITONTF_NO_GPU_DEVICE, 0 /* num_intra_threads */,
           0 /* num_inter_threads */, false /* use_per_session_threads */,
-          "" /* graph_tag */, "" /* signature_def */,
-          false /* have_graph */, 0 /* graph_level */,
-          backend_config_->allow_gpu_memory_growth_,
+          "" /* graph_tag */, "" /* signature_def */, false /* have_graph */,
+          0 /* graph_level */, backend_config_->allow_gpu_memory_growth_,
           backend_config_->per_process_gpu_memory_fraction_,
           backend_config_->allow_soft_placement_,
           backend_config_->memory_limit_mb_, nullptr /* tftrt_config */,
@@ -1455,7 +1455,8 @@ ModelState::ParseParameters()
     RETURN_IF_ERROR(ParseParameter(
         "TF_USE_PER_SESSION_THREADS", params, &use_per_session_threads_));
     RETURN_IF_ERROR(ParseParameter("TF_GRAPH_TAG", params, &graph_tag_));
-    RETURN_IF_ERROR(ParseParameter("TF_SIGNITURE_DEF", params, &signature_def_));
+    RETURN_IF_ERROR(
+        ParseParameter("TF_SIGNATURE_DEF", params, &signature_def_));
   }
 
   return nullptr;
