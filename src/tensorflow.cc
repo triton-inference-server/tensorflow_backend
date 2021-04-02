@@ -765,8 +765,8 @@ class ModelState : public BackendModel {
   int num_intra_threads_;
   int num_inter_threads_;
   bool use_per_session_threads_;
-  std::string graph_tag_ = "";
-  std::string signature_def_ = "";
+  std::string graph_tag_;
+  std::string signature_def_;
 };
 
 TRITONSERVER_Error*
@@ -1455,10 +1455,7 @@ ModelState::ParseParameters()
     RETURN_IF_ERROR(ParseParameter(
         "TF_USE_PER_SESSION_THREADS", params, &use_per_session_threads_));
     RETURN_IF_ERROR(ParseParameter("TF_GRAPH_TAG", params, &graph_tag_));
-    RETURN_IF_ERROR(
-        ParseParameter("TF_GRAPH_TAG", params, &graph_tag_));
-    RETURN_IF_ERROR(
-        ParseParameter("TF_SIGNITURE_DEF", params, &signature_def_));
+    RETURN_IF_ERROR(ParseParameter("TF_SIGNITURE_DEF", params, &signature_def_));
   }
 
   return nullptr;
@@ -1548,6 +1545,7 @@ ModelInstanceState::Create(
 
   RETURN_IF_ERROR(
       model_state->GetModel(gpu_device, model_path, &(*state)->model_));
+
   return nullptr;  // success
 }
 
