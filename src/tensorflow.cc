@@ -943,7 +943,7 @@ ModelState::CreateModel(
     RETURN_IF_TRITONTF_ERROR(TRITONTF_ModelCreateFromSavedModel(
         &model, Name().c_str(), model_path.c_str(), device_id,
         NumIntraThreads(), NumInterThreads(), UsePerSessionThreads(),
-        GraphTag(), SignatureDef(), has_graph_level, graph_level,
+        GraphTag().c_str(), SignatureDef().c_str(), has_graph_level, graph_level,
         BackendConfig()->allow_gpu_memory_growth_,
         BackendConfig()->per_process_gpu_memory_fraction_,
         BackendConfig()->allow_soft_placement_,
