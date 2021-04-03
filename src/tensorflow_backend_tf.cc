@@ -903,7 +903,7 @@ TRITONTF_ModelCreateFromSavedModel(
     TRITONTF_Model** trtistf_model, const char* model_name,
     const char* model_path, const int device_id, const int num_intra_threads,
     const int num_inter_threads, const bool use_per_session_threads,
-    char*  graph_tag, char*  signature_def,
+    const char* graph_tag, const char* signature_def,
     const bool has_graph_level, const int graph_level,
     const bool allow_gpu_memory_growth,
     const float per_process_gpu_memory_fraction,
@@ -947,8 +947,9 @@ TRITONTF_ModelCreateFromSavedModel(
   // If user does not specify a 'tag' in the configuration file, use 'serve' as
   // default
   std::unordered_set<std::string> saved_model_tags;
-  const std::string TAG_TO_USE =
-      graph_tag.empty() ? tensorflow::kSavedModelTagServe : graph_tag;
+  const std::string TAG_TO_USE = (strcmp(graph_tag, "") == 0)
+                                     ? tensorflow::kSavedModelTagServe
+                                     : graph_tag;
   saved_model_tags.insert(TAG_TO_USE);
 
   tensorflow::RunOptions run_options;
@@ -973,7 +974,7 @@ TRITONTF_ModelCreateFromSavedModel(
   // If user does not specify a 'signature_def' in the configuration file,
   // then use "serving_default" as default
   const std::string SIGNATURE_DEF_KEY_TO_USE =
-      signature_def.empty() ? "serving_default" : signature_def;
+      (strcmp(signature_def, "") == 0) ? "serving_default" : signature_def;
   static const std::string INIT_OP_SIGNATURE_DEF_KEY("__saved_model_init_op");
   static const std::string TRAIN_OP_SIGNATURE_DEF_KEY("__saved_model_train_op");
   auto sig_itr =
