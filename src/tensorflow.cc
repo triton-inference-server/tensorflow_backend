@@ -107,10 +107,10 @@ ValidateSequenceControl(
 }
 
 TRITONSERVER_Error*
-ValidateTRITONTFModel(
-    const std::string& model_name,
-    triton::common::TritonJson::Value& model_config, TRITONTF_Model* model)
+ValidateTRITONTFModel(BackendModel* model_state, TRITONTF_Model* model)
 {
+  const std::string& model_name = model_state->Name();
+  triton::common::TritonJson::Value& model_config = model_state->ModelConfig();
   // For graphdef the model inputs and outputs are just "potential"
   // inputs and outputs since graphdef doesn't explicitly list the
   // inputs and outputs. Also, only the name is available, shape and
@@ -248,11 +248,12 @@ ValidateSequenceControl(
 
 TRITONSERVER_Error*
 ValidateTRITONTFModel(
-    const std::string& model_name,
-    triton::common::TritonJson::Value& model_config, const int max_batch_size,
-    TRITONTF_Model* model, IONameMap* input_name_map,
+    BackendModel* model_state, TRITONTF_Model* model, IONameMap* input_name_map,
     IONameMap* output_name_map)
 {
+  const std::string& model_name = model_state->Name();
+  triton::common::TritonJson::Value& model_config = model_state->ModelConfig();
+  const int max_batch_size = model_state->MaxBatchSize();
   // The model inputs are the expected inputs and the outputs are
   // the allowed outputs. Saved-model gives these explicitly so we can
   // check precisely if the model configuration matches.
@@ -272,6 +273,12 @@ ValidateTRITONTFModel(
   triton::common::TritonJson::Value config_inputs;
   RETURN_IF_ERROR(model_config.MemberAsArray("input", &config_inputs));
   size_t expected_input_cnt = config_inputs.ArraySize();
+  {
+    triton::common::TritonJson::Value config_batch_inputs;
+    RETURN_IF_ERROR(
+        model_config.MemberAsArray("batch_input", &config_batch_inputs));
+    expected_input_cnt += config_batch_inputs.ArraySize();
+  }
 
   // If this is a sequence model then make sure that the required
   // inputs are present in the model and have the correct shape and
@@ -342,9 +349,28 @@ ValidateTRITONTFModel(
       RETURN_IF_ERROR(ParseShape(io, "dims", &dims));
     }
     if (input->shape_->rank_ != 0) {
-      RETURN_IF_ERROR(CompareDims(
-          model_name, io_name, input->shape_, dims, max_batch_size > 0,
-          false /* compare_exact */));
+      triton::common::TritonJson::Value allow_ragged_batch_json;
+      bool allow_ragged_batch = false;
+      if (io.Find("allow_ragged_batch", &allow_ragged_batch_json)) {
+        RETURN_IF_ERROR(allow_ragged_batch_json.AsBool(&allow_ragged_batch));
+      }
+      if (allow_ragged_batch) {
+        // Make sure the input has shpae [-1]
+        if ((input->shape_->rank_ != 1) ||
+            (input->shape_->dims_[0] != WILDCARD_DIM)) {
+          return TRITONSERVER_ErrorNew(
+              TRITONSERVER_ERROR_INVALID_ARG,
+              (std::string("unable to load model '") + model_name +
+               "', configuration expects model provides input with shape [-1]  "
+               "for ragged input '" +
+               io_name + "', model provides " + ShapeToString(input->shape_))
+                  .c_str());
+        }
+      } else {
+        RETURN_IF_ERROR(CompareDims(
+            model_name, io_name, input->shape_, dims, max_batch_size > 0,
+            false /* compare_exact */));
+      }
     } else {
       // The savedmodel doesn't specify a shape for the input so use the shape
       // from the model configuration
@@ -398,9 +424,12 @@ ValidateTRITONTFModel(
     }
 
     if (output->shape_->rank_ != 0) {
-      RETURN_IF_ERROR(CompareDims(
-          model_name, io_name, output->shape_, dims, max_batch_size > 0,
-          true /* compare_exact */));
+      // The batch output shape doesn't necessarily match the model
+      if (model_state->FindBatchOutput(io_name) == nullptr) {
+        RETURN_IF_ERROR(CompareDims(
+            model_name, io_name, output->shape_, dims, max_batch_size > 0,
+            true /* compare_exact */));
+      }
     } else {
       // The savedmodel doesn't specify a shape for the output so use the shape
       // from the model configuration
@@ -887,8 +916,7 @@ ModelState::CreateModel(
         auto_mixed_precision));
     lmodel.tritontf_model_.reset(model, TRITONTF_ModelDelete);
 
-    RETURN_IF_ERROR(
-        graphdef::ValidateTRITONTFModel(Name(), ModelConfig(), model));
+    RETURN_IF_ERROR(graphdef::ValidateTRITONTFModel(this, model));
   } else {
     TRITONTF_Model* model = nullptr;
     RETURN_IF_TRITONTF_ERROR(TRITONTF_ModelCreateFromSavedModel(
@@ -901,8 +929,7 @@ ModelState::CreateModel(
     lmodel.tritontf_model_.reset(model, TRITONTF_ModelDelete);
 
     RETURN_IF_ERROR(savedmodel::ValidateTRITONTFModel(
-        Name(), ModelConfig(), MaxBatchSize(), model, &(lmodel.input_name_map_),
-        &(lmodel.output_name_map_)));
+        this, model, &(lmodel.input_name_map_), &(lmodel.output_name_map_)));
   }
 
   if (lmodel.input_device_id_ != ModelState::MODEL_DEVICE) {
@@ -1770,11 +1797,13 @@ ModelInstanceState::ProcessRequests(
         size_t dst_buffer_byte_size;
         TRITONSERVER_MemoryType dst_memory_type;
         int64_t dst_memory_type_id;
-        collector.ProcessBatchInput(
-            batch_input, TRITONTF_TensorData(tensor),
-            TRITONTF_TensorDataByteSize(tensor), allowed_input_types,
-            &dst_buffer, &dst_buffer_byte_size, &dst_memory_type,
-            &dst_memory_type_id);
+        RESPOND_ALL_AND_SET_NULL_IF_ERROR(
+            responses, responses.size(),
+            collector.ProcessBatchInput(
+                batch_input, TRITONTF_TensorData(tensor),
+                TRITONTF_TensorDataByteSize(tensor), allowed_input_types,
+                &dst_buffer, &dst_buffer_byte_size, &dst_memory_type,
+                &dst_memory_type_id));
 
         LOG_MESSAGE(
             TRITONSERVER_LOG_VERBOSE,
