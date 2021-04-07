@@ -1587,14 +1587,34 @@ ModelInstanceState::ProcessRequests(
       TRITONSERVER_DataType datatype;
       const int64_t* shape;
       uint32_t dims_count;
-      uint32_t buffer_count;
       TRITONBACKEND_InputProperties(
-          input, &name, &datatype, &shape, &dims_count, nullptr, &buffer_count);
+          input, &name, &datatype, &shape, &dims_count, nullptr, nullptr);
 
+      std::vector<int64_t> batchn_shape;
+      // The shape should be flatten shape of the whole batch
+      if (StateForModel()->IsInputRagged(name)) {
+        batchn_shape = std::vector<int64_t>{0};
+        for (size_t idx = 0; idx < request_count; idx++) {
+          TRITONBACKEND_Input* input;
+          RESPOND_AND_SET_NULL_IF_ERROR(
+              &responses[idx],
+              TRITONBACKEND_RequestInput(requests[idx], name, &input));
+          const int64_t* shape;
+          uint32_t dims_count;
+          RESPOND_AND_SET_NULL_IF_ERROR(
+              &responses[idx], TRITONBACKEND_InputProperties(
+                                   input, nullptr, nullptr, &shape, &dims_count,
+                                   nullptr, nullptr));
+
+          batchn_shape[0] += GetElementCount(shape, dims_count);
+        }
+      }
       // The shape for the entire input patch, [total_batch_size, ...]
-      std::vector<int64_t> batchn_shape(shape, shape + dims_count);
-      if (max_batch_size != 0) {
-        batchn_shape[0] = total_batch_size;
+      else {
+        batchn_shape = std::vector<int64_t>(shape, shape + dims_count);
+        if (max_batch_size != 0) {
+          batchn_shape[0] = total_batch_size;
+        }
       }
 
       // The name of the input in the model can be different...
@@ -1684,6 +1704,85 @@ ModelInstanceState::ProcessRequests(
            "' is GPU tensor: " +
            ((TRITONTF_TensorIsGPUTensor(tensor)) ? "true" : "false"))
               .c_str());
+    }
+
+    // Process batch input if any
+    for (const auto& batch_input : StateForModel()->BatchInputs()) {
+      std::vector<int64_t> shape;
+      collector.BatchInputShape(batch_input, &shape);
+
+      for (const auto& input_name : batch_input.TargetNames()) {
+        // The name of the input in the model can be different...
+        const char* input_tensor_name = input_name.c_str();
+        const auto& tn_itr = model_.input_name_map_.find(input_name);
+        if (tn_itr != model_.input_name_map_.end()) {
+          input_tensor_name = tn_itr->second.c_str();
+        }
+
+        // Create a TF tensor to hold the entire input batch. Only try
+        // to create a tensor on a specific device if 'input_device_id_'
+        // is set. If unable to create the tensor then fail all
+        // requests.
+        TRITONTF_Tensor* tensor = TRITONTF_TensorNew(
+            input_tensor_name, ConvertDataType(batch_input.DataType()),
+            shape.size(), (shape.size() == 0) ? nullptr : &shape[0],
+            model_.input_device_id_);
+        if (tensor == nullptr) {
+          auto err = TRITONSERVER_ErrorNew(
+              TRITONSERVER_ERROR_INTERNAL,
+              (std::string("failed to create input tensor '") + input_name +
+               "' with shape " + backend::ShapeToString(shape) +
+               " and data type " +
+               TRITONSERVER_DataTypeString(batch_input.DataType()) + " for '" +
+               Name() + "'")
+                  .c_str());
+          // Send remaining responses and returned
+          for (uint32_t r = 0; r < request_count; ++r) {
+            if (responses[r] != nullptr) {
+              LOG_IF_ERROR(
+                  TRITONBACKEND_ResponseSend(
+                      responses[r], TRITONSERVER_RESPONSE_COMPLETE_FINAL, err),
+                  "failed to send TensorFlow backend response");
+            }
+
+            LOG_IF_ERROR(
+                TRITONBACKEND_RequestRelease(
+                    requests[r], TRITONSERVER_REQUEST_RELEASE_ALL),
+                "failed releasing request");
+          }
+          TRITONSERVER_ErrorDelete(err);
+          return;
+        }
+        std::vector<std::pair<TRITONSERVER_MemoryType, int64_t>>
+            allowed_input_types;
+        if (TRITONTF_TensorIsGPUTensor(tensor)) {
+          allowed_input_types = {{TRITONSERVER_MEMORY_GPU, DeviceId()}};
+        } else {
+          allowed_input_types = {{TRITONSERVER_MEMORY_CPU, 0}};
+        }
+
+        // Add the new TF tensor to the list of TF inputs.
+        TRITONTF_TensorList* tlink =
+            TRITONTF_TensorListNew(tensor, *input_tensors);
+        *input_tensors = tlink;
+
+        const char* dst_buffer;
+        size_t dst_buffer_byte_size;
+        TRITONSERVER_MemoryType dst_memory_type;
+        int64_t dst_memory_type_id;
+        collector.ProcessBatchInput(
+            batch_input, TRITONTF_TensorData(tensor),
+            TRITONTF_TensorDataByteSize(tensor), allowed_input_types,
+            &dst_buffer, &dst_buffer_byte_size, &dst_memory_type,
+            &dst_memory_type_id);
+
+        LOG_MESSAGE(
+            TRITONSERVER_LOG_VERBOSE,
+            (std::string("TRITONBACKEND_ModelExecute: input '") + input_name +
+             "' is GPU tensor: " +
+             ((TRITONTF_TensorIsGPUTensor(tensor)) ? "true" : "false"))
+                .c_str());
+      }
     }
 
     // Finalize...
@@ -1797,64 +1896,74 @@ ModelInstanceState::ProcessRequests(
     for (const auto& name : model_output_names) {
       TRITONTF_Tensor* output_tensor = output_tensor_itr->tensor_;
 
-      TRITONTF_DataType tf_datatype = TRITONTF_TensorDataType(output_tensor);
-      TRITONTF_Shape* tf_shape = TRITONTF_TensorShape(output_tensor);
+      const BatchOutput* batch_output = StateForModel()->FindBatchOutput(name);
+      if (batch_output == nullptr) {
+        TRITONTF_DataType tf_datatype = TRITONTF_TensorDataType(output_tensor);
+        TRITONTF_Shape* tf_shape = TRITONTF_TensorShape(output_tensor);
 
-      const TRITONSERVER_DataType datatype = ConvertDataType(tf_datatype);
+        const TRITONSERVER_DataType datatype = ConvertDataType(tf_datatype);
 
-      // batchn_shape holds the shape of the entire tensor batch, but
-      // is overwritten below and used as the shape for each response
-      // output.
-      std::vector<int64_t> batchn_shape;
-      batchn_shape.reserve(tf_shape->rank_);
-      for (size_t itr = 0; itr < tf_shape->rank_; itr++) {
-        const int64_t dim = tf_shape->dims_[itr];
-        batchn_shape.push_back(dim);
-      }
-
-      // Custom handling for string/bytes tensor...
-      if (datatype == TRITONSERVER_TYPE_BYTES) {
-        size_t tensor_offset = 0;
-
-        for (size_t idx = 0; idx < responses.size(); idx++) {
-          auto& request = requests[idx];
-          auto& response = responses[idx];
-
-          if (max_batch_size != 0) {
-            // [TODO] remember some input properties on the first call
-            TRITONBACKEND_Input* input;
-            TRITONBACKEND_RequestInputByIndex(request, 0 /* index*/, &input);
-            const int64_t* shape;
-            TRITONBACKEND_InputProperties(
-                input, nullptr, nullptr, &shape, nullptr, nullptr, nullptr);
-            batchn_shape[0] = shape[0];
-          }
-
-          const size_t tensor_element_cnt = GetElementCount(batchn_shape);
-
-          // Only need an response tensor for requested outputs.
-          if ((response != nullptr) &&
-              (request_required_outputs[idx].find(name) !=
-               request_required_outputs[idx].end())) {
-            TRITONBACKEND_Output* response_output;
-            RESPOND_AND_SET_NULL_IF_ERROR(
-                &response,
-                TRITONBACKEND_ResponseOutput(
-                    response, &response_output, name.c_str(), datatype,
-                    batchn_shape.data(), batchn_shape.size()));
-            string_buffer.emplace_back(new std::string());
-            cuda_copy |= SetStringOutputBuffer(
-                output_tensor, &response, response_output, tensor_element_cnt,
-                tensor_offset, CudaStream(), string_buffer.back().get());
-          }
-
-          tensor_offset += tensor_element_cnt;
+        // batchn_shape holds the shape of the entire tensor batch, but
+        // is overwritten below and used as the shape for each response
+        // output.
+        std::vector<int64_t> batchn_shape;
+        batchn_shape.reserve(tf_shape->rank_);
+        for (size_t itr = 0; itr < tf_shape->rank_; itr++) {
+          const int64_t dim = tf_shape->dims_[itr];
+          batchn_shape.push_back(dim);
         }
-      }
-      // Use the responder for non-STRING datatype...
-      else {  // datatype != DataType::TYPE_STRING
-        responder.ProcessTensor(
-            name, datatype, batchn_shape, TRITONTF_TensorData(output_tensor),
+
+        // Custom handling for string/bytes tensor...
+        if (datatype == TRITONSERVER_TYPE_BYTES) {
+          size_t tensor_offset = 0;
+
+          for (size_t idx = 0; idx < responses.size(); idx++) {
+            auto& request = requests[idx];
+            auto& response = responses[idx];
+
+            if (max_batch_size != 0) {
+              // [TODO] remember some input properties on the first call
+              TRITONBACKEND_Input* input;
+              TRITONBACKEND_RequestInputByIndex(request, 0 /* index*/, &input);
+              const int64_t* shape;
+              TRITONBACKEND_InputProperties(
+                  input, nullptr, nullptr, &shape, nullptr, nullptr, nullptr);
+              batchn_shape[0] = shape[0];
+            }
+
+            const size_t tensor_element_cnt = GetElementCount(batchn_shape);
+
+            // Only need an response tensor for requested outputs.
+            if ((response != nullptr) &&
+                (request_required_outputs[idx].find(name) !=
+                 request_required_outputs[idx].end())) {
+              TRITONBACKEND_Output* response_output;
+              RESPOND_AND_SET_NULL_IF_ERROR(
+                  &response,
+                  TRITONBACKEND_ResponseOutput(
+                      response, &response_output, name.c_str(), datatype,
+                      batchn_shape.data(), batchn_shape.size()));
+              string_buffer.emplace_back(new std::string());
+              cuda_copy |= SetStringOutputBuffer(
+                  output_tensor, &response, response_output, tensor_element_cnt,
+                  tensor_offset, CudaStream(), string_buffer.back().get());
+            }
+
+            tensor_offset += tensor_element_cnt;
+          }
+        }
+        // Use the responder for non-STRING datatype...
+        else {  // datatype != DataType::TYPE_STRING
+          responder.ProcessTensor(
+              name, datatype, batchn_shape, TRITONTF_TensorData(output_tensor),
+              (TRITONTF_TensorIsGPUTensor(output_tensor))
+                  ? TRITONSERVER_MEMORY_GPU
+                  : TRITONSERVER_MEMORY_CPU,
+              (TRITONTF_TensorIsGPUTensor(output_tensor)) ? DeviceId() : 0);
+        }
+      } else {
+        responder.ProcessBatchOutput(
+            name, *batch_output, TRITONTF_TensorData(output_tensor),
             (TRITONTF_TensorIsGPUTensor(output_tensor))
                 ? TRITONSERVER_MEMORY_GPU
                 : TRITONSERVER_MEMORY_CPU,
