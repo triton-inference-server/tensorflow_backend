@@ -1618,7 +1618,8 @@ ModelInstanceState::ProcessRequests(
           input, &name, &datatype, &shape, &dims_count, nullptr, nullptr);
 
       std::vector<int64_t> batchn_shape;
-      // The shape should be flatten shape of the whole batch
+      // For a ragged input tensor, the tensor shape should be
+      // the flatten shape of the whole batch
       if (StateForModel()->IsInputRagged(name)) {
         batchn_shape = std::vector<int64_t>{0};
         for (size_t idx = 0; idx < request_count; idx++) {
