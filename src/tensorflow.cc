@@ -1121,6 +1121,26 @@ ModelState::ParseParameters()
         TRITONSERVER_ErrorDelete(err);
       }
     }
+
+    err = ParseParameter(
+        params, "TF_GRAPH_TAG", &graph_tag_);
+    if (err != nullptr) {
+      if (TRITONSERVER_ErrorCode(err) != TRITONSERVER_ERROR_NOT_FOUND) {
+        return err;
+      } else {
+        TRITONSERVER_ErrorDelete(err);
+      }
+    }
+
+    err = ParseParameter(
+        params, "TF_SIGNATURE_DEF", &signature_def_);
+    if (err != nullptr) {
+      if (TRITONSERVER_ErrorCode(err) != TRITONSERVER_ERROR_NOT_FOUND) {
+        return err;
+      } else {
+        TRITONSERVER_ErrorDelete(err);
+      }
+    }
   }
 
   return nullptr;
@@ -1440,26 +1460,6 @@ ModelState::ValidateModelConfig()
   }
 
   return nullptr;  // success
-}
-
-TRITONSERVER_Error*
-ModelState::ParseParameters()
-{
-  // Validate and set parameters
-  triton::common::TritonJson::Value params;
-  if (model_config_.Find("parameters", &params)) {
-    RETURN_IF_ERROR(
-        ParseParameter("TF_NUM_INTRA_THREADS", params, &num_intra_threads_));
-    RETURN_IF_ERROR(
-        ParseParameter("TF_NUM_INTER_THREADS", params, &num_inter_threads_));
-    RETURN_IF_ERROR(ParseParameter(
-        "TF_USE_PER_SESSION_THREADS", params, &use_per_session_threads_));
-    RETURN_IF_ERROR(ParseParameter("TF_GRAPH_TAG", params, &graph_tag_));
-    RETURN_IF_ERROR(
-        ParseParameter("TF_SIGNATURE_DEF", params, &signature_def_));
-  }
-
-  return nullptr;
 }
 
 //

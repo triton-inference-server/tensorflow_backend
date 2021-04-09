@@ -320,13 +320,13 @@ ParseParameter(
 
 TRITONSERVER_Error*
 ParseParameter(
-    const std::string& mkey, triton::common::TritonJson::Value& params,
-    std::string* setting)
+    triton::common::TritonJson::Value& params, const std::string& mkey, 
+    std::string* value)
 {
-  std::string value;
-  ReadParameter(params, mkey, &(value));
-  if (!value.empty()) {
-    *setting = value;
+  std::string value_str;
+  RETURN_IF_ERROR(GetParameterValue(params, mkey, &value_str));
+  if (!value_str.empty()) {
+    *value = value_str;
   }
 
   return nullptr;
