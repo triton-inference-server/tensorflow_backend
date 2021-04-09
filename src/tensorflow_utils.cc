@@ -320,7 +320,7 @@ ParseParameter(
 
 TRITONSERVER_Error*
 ParseParameter(
-    triton::common::TritonJson::Value& params, const std::string& mkey, 
+    triton::common::TritonJson::Value& params, const std::string& mkey,
     std::string* value)
 {
   std::string value_str;

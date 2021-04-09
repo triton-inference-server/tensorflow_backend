@@ -1122,8 +1122,7 @@ ModelState::ParseParameters()
       }
     }
 
-    err = ParseParameter(
-        params, "TF_GRAPH_TAG", &graph_tag_);
+    err = ParseParameter(params, "TF_GRAPH_TAG", &graph_tag_);
     if (err != nullptr) {
       if (TRITONSERVER_ErrorCode(err) != TRITONSERVER_ERROR_NOT_FOUND) {
         return err;
@@ -1132,8 +1131,7 @@ ModelState::ParseParameters()
       }
     }
 
-    err = ParseParameter(
-        params, "TF_SIGNATURE_DEF", &signature_def_);
+    err = ParseParameter(params, "TF_SIGNATURE_DEF", &signature_def_);
     if (err != nullptr) {
       if (TRITONSERVER_ErrorCode(err) != TRITONSERVER_ERROR_NOT_FOUND) {
         return err;
