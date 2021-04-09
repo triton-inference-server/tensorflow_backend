@@ -162,3 +162,52 @@ container as a new Docker image (for example, by using *docker
 commit*), and then build the backend as described
 [above](#build-the-tensorflow-backend) with
 TRITON_TENSORFLOW_DOCKER_IMAGE set to refer to the new Docker image.
+
+
+## Using the Tensorflow Backend
+### Parameters
+
+Configuration of Tensorflow for a model is done through the Parameters section of the model's 'config.pbtxt' file. The parameters and their description are as follows.
+
+* `TF_NUM_INTRA_THREADS`: Number of threads to use for inference on the CPU. Should be a non-negative number.
+* `TF_NUM_INTER_THREADS`: Number of threads to use for inference on the CPU. Should be a non-negative number.
+* `TF_USE_PER_SESSION_THREADS`: Boolean value to see if per session thread is used. "Yes" is accepted as true
+* `TF_GRAPH_TAG`: Tag of the graphs to use. See [protobuf here](https://github.com/tensorflow/tensorflow/blob/6f72753a66d6abab8b839cc263a9f1329861f6f9/tensorflow/core/protobuf/meta_graph.proto#L56)
+* `TF_SIGNATURE_DEF`: Signature def to use. See [protobuf here](https://github.com/tensorflow/tensorflow/blob/6f72753a66d6abab8b839cc263a9f1329861f6f9/tensorflow/core/protobuf/meta_graph.proto#L260-L331)
+
+
+The section of model config file specifying these parameters will look like:
+
+```
+.
+.
+.
+parameters: {
+key: "TF_NUM_INTRA_THREADS"
+value: {
+string_value:"2"
+}
+}
+parameters: {
+key: "TF_USE_PER_SESSION_THREADS"
+value: {
+string_value:"yes"
+}
+}
+parameters: {
+key: "TF_GRAPH_TAG"
+value: {
+string_value: "serve1"
+}
+}
+parameters: {
+key: "TF_SIGNATURE_DEF"
+value: {
+string_value: "serving2"
+}
+}
+.
+.
+.
+
+```

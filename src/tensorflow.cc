@@ -740,6 +740,8 @@ class ModelState : public BackendModel {
   int NumIntraThreads() const { return num_intra_threads_; }
   int NumInterThreads() const { return num_inter_threads_; }
   int UsePerSessionThreads() const { return use_per_session_threads_; }
+  std::string GraphTag() const { return graph_tag_; }
+  std::string SignatureDef() const { return signature_def_; }
 
  private:
   TRITONSERVER_Error* CreateModel(
@@ -763,6 +765,8 @@ class ModelState : public BackendModel {
   int num_intra_threads_;
   int num_inter_threads_;
   bool use_per_session_threads_;
+  std::string graph_tag_;
+  std::string signature_def_;
 };
 
 TRITONSERVER_Error*
@@ -934,7 +938,8 @@ ModelState::CreateModel(
     RETURN_IF_TRITONTF_ERROR(TRITONTF_ModelCreateFromSavedModel(
         &model, Name().c_str(), model_path.c_str(), device_id,
         NumIntraThreads(), NumInterThreads(), UsePerSessionThreads(),
-        has_graph_level, graph_level, BackendConfig()->allow_gpu_memory_growth_,
+        GraphTag().c_str(), SignatureDef().c_str(), has_graph_level,
+        graph_level, BackendConfig()->allow_gpu_memory_growth_,
         BackendConfig()->per_process_gpu_memory_fraction_,
         BackendConfig()->allow_soft_placement_,
         BackendConfig()->memory_limit_mb_, tftrt_config_ptr,
@@ -1025,7 +1030,7 @@ ModelState::Create(TRITONBACKEND_Model* triton_model, ModelState** state)
 ModelState::ModelState(TRITONBACKEND_Model* triton_model)
     : BackendModel(triton_model), max_session_share_count_(1),
       num_intra_threads_(0), num_inter_threads_(0),
-      use_per_session_threads_(false)
+      use_per_session_threads_(false), graph_tag_(""), signature_def_("")
 {
   // Obtain backend configuration
   TRITONBACKEND_Backend* backend;
@@ -1109,6 +1114,24 @@ ModelState::ParseParameters()
 
     err = ParseParameter(
         params, "TF_USE_PER_SESSION_THREADS", &use_per_session_threads_);
+    if (err != nullptr) {
+      if (TRITONSERVER_ErrorCode(err) != TRITONSERVER_ERROR_NOT_FOUND) {
+        return err;
+      } else {
+        TRITONSERVER_ErrorDelete(err);
+      }
+    }
+
+    err = ParseParameter(params, "TF_GRAPH_TAG", &graph_tag_);
+    if (err != nullptr) {
+      if (TRITONSERVER_ErrorCode(err) != TRITONSERVER_ERROR_NOT_FOUND) {
+        return err;
+      } else {
+        TRITONSERVER_ErrorDelete(err);
+      }
+    }
+
+    err = ParseParameter(params, "TF_SIGNATURE_DEF", &signature_def_);
     if (err != nullptr) {
       if (TRITONSERVER_ErrorCode(err) != TRITONSERVER_ERROR_NOT_FOUND) {
         return err;
@@ -1367,8 +1390,8 @@ ModelState::AutoCompleteConfig()
           &tritontf_model, Name().c_str(), model_path.c_str(),
           TRITONTF_NO_GPU_DEVICE, 0 /* num_intra_threads */,
           0 /* num_inter_threads */, false /* use_per_session_threads */,
-          false /* have_graph */, 0 /* graph_level */,
-          backend_config_->allow_gpu_memory_growth_,
+          "" /* graph_tag */, "" /* signature_def */, false /* have_graph */,
+          0 /* graph_level */, backend_config_->allow_gpu_memory_growth_,
           backend_config_->per_process_gpu_memory_fraction_,
           backend_config_->allow_soft_placement_,
           backend_config_->memory_limit_mb_, nullptr /* tftrt_config */,
