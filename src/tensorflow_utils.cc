@@ -26,7 +26,6 @@
 
 #include "tensorflow_utils.h"
 
-#include <algorithm>
 #include "triton/backend/backend_common.h"
 
 namespace triton { namespace backend { namespace tensorflow {
@@ -323,7 +322,7 @@ ParseParameter(
     triton::common::TritonJson::Value& params, const std::string& mkey,
     std::string* value)
 {
-  RETURN_IF_ERROR(GetParameterValue(params, mkey, &value));
+  RETURN_IF_ERROR(GetParameterValue(params, mkey, value));
   return nullptr;
 }
 
