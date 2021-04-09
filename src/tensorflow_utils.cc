@@ -25,7 +25,6 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "tensorflow_utils.h"
-#include <algorithm>
 
 #include "triton/backend/backend_common.h"
 
@@ -295,66 +294,27 @@ ConvertDataType(TRITONSERVER_DataType dtype)
 }
 
 TRITONSERVER_Error*
-ReadParameter(
-    triton::common::TritonJson::Value& params, const std::string& key,
-    std::string* param)
-{
-  triton::common::TritonJson::Value value;
-  RETURN_ERROR_IF_FALSE(
-      params.Find(key.c_str(), &value), TRITONSERVER_ERROR_INVALID_ARG,
-      std::string("model configuration is missing the parameter ") + key);
-  RETURN_IF_ERROR(value.MemberAsString("string_value", param));
-  return nullptr;  // success
-}
-
-
-TRITONSERVER_Error*
 ParseParameter(
-    const std::string& mkey, triton::common::TritonJson::Value& params,
-    bool* setting)
+    triton::common::TritonJson::Value& params, const std::string& mkey,
+    bool* value)
 {
-  std::string value;
-  ReadParameter(params, mkey, &(value));
-  std::transform(
-      value.begin(), value.end(), value.begin(),
-      [](unsigned char c) { return std::tolower(c); });
-  if (value.compare("yes") == 0) {
-    *setting = true;
-  }
+  std::string value_str;
+  RETURN_IF_ERROR(GetParameterValue(params, mkey, &value_str));
+  RETURN_IF_ERROR(ParseBoolValue(value_str, value));
 
   return nullptr;
 }
 
 TRITONSERVER_Error*
 ParseParameter(
-    const std::string& mkey, triton::common::TritonJson::Value& params,
-    int* setting)
+    triton::common::TritonJson::Value& params, const std::string& mkey,
+    int* value)
 {
-  std::string value;
-  ReadParameter(params, mkey, &(value));
-  if (!ConvertInt(value, setting)) {
-    return TRITONSERVER_ErrorNew(
-        TRITONSERVER_ERROR_INVALID_ARG,
-        (std::string("expected the parameter '") + mkey +
-         "' to be a non-negative number, got " + value)
-            .c_str());
-  }
+  std::string value_str;
+  RETURN_IF_ERROR(GetParameterValue(params, mkey, &value_str));
+  RETURN_IF_ERROR(ParseIntValue(value_str, value));
 
   return nullptr;
-}
-
-bool
-ConvertInt(const std::string& string_val, int* setting)
-{
-  *setting = 0;
-  for (const auto ch : string_val) {
-    if (!std::isdigit(ch)) {
-      return false;
-    } else {
-      *setting = (*setting * 10) + (ch - '0');
-    }
-  }
-  return true;
 }
 
 }}}  // namespace triton::backend::tensorflow

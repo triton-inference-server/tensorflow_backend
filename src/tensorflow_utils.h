@@ -76,16 +76,12 @@ TRITONTF_DataType ConvertDataType(const std::string& dtype);
 /// configuration data-type.
 TRITONTF_DataType ConvertDataType(TRITONSERVER_DataType dtype);
 
-TRITONSERVER_Error* ReadParameter(
-    triton::common::TritonJson::Value& params, const std::string& key,
-    std::string* param);
 TRITONSERVER_Error* ParseParameter(
-    const std::string& mkey, triton::common::TritonJson::Value& params,
-    bool* setting);
+    triton::common::TritonJson::Value& params, const std::string& mkey,
+    bool* value);
 TRITONSERVER_Error* ParseParameter(
-    const std::string& mkey, triton::common::TritonJson::Value& params,
-    int* setting);
-bool ConvertInt(const std::string& string_val, int* setting);
+    triton::common::TritonJson::Value& params, const std::string& mkey,
+    int* value);
 
 // If TRITONTF Error is non-OK, return the equivalent TRTIS status.
 #define RETURN_IF_TRITONTF_ERROR(TFWS)                                       \
