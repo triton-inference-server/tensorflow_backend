@@ -737,6 +737,9 @@ class ModelState : public BackendModel {
   bool IsGraphdef() const { return is_graphdef_; }
   TRITONSERVER_Error* GetModel(
       const int device_id, const std::string& model_path, Model* model);
+  int NumIntraThreads() const { return num_intra_threads_; }
+  int NumInterThreads() const { return num_inter_threads_; }
+  int UsePerSessionThreads() const { return use_per_session_threads_; }
 
  private:
   TRITONSERVER_Error* CreateModel(
@@ -746,13 +749,20 @@ class ModelState : public BackendModel {
   // Auto-complete the model configuration
   TRITONSERVER_Error* AutoCompleteConfig();
 
+  // Parses and validates parameters in config
+  TRITONSERVER_Error* ParseParameters();
+
   // Validate that model configuration is supported by this backend.
   TRITONSERVER_Error* ValidateModelConfig();
 
   BackendConfiguration* backend_config_;
   bool is_graphdef_;
-  size_t max_session_share_count_;
+  int max_session_share_count_;
   std::map<int, std::pair<size_t, Model>> models_;
+
+  int num_intra_threads_;
+  int num_inter_threads_;
+  bool use_per_session_threads_;
 };
 
 TRITONSERVER_Error*
@@ -760,7 +770,8 @@ ModelState::GetModel(int device_id, const std::string& model_path, Model* model)
 {
   // reuse existing model if it has been created on the device
   auto it = models_.find(device_id);
-  if ((it != models_.end()) && (it->second.first < max_session_share_count_)) {
+  if ((it != models_.end()) &&
+      (it->second.first < (size_t)max_session_share_count_)) {
     *model = it->second.second;
     ++it->second.first;
     return nullptr;  // success
@@ -908,8 +919,9 @@ ModelState::CreateModel(
   if (IsGraphdef()) {
     TRITONTF_Model* model = nullptr;
     RETURN_IF_TRITONTF_ERROR(TRITONTF_ModelCreateFromGraphDef(
-        &model, Name().c_str(), model_path.c_str(), device_id, has_graph_level,
-        graph_level, BackendConfig()->allow_gpu_memory_growth_,
+        &model, Name().c_str(), model_path.c_str(), device_id,
+        NumIntraThreads(), NumInterThreads(), UsePerSessionThreads(),
+        has_graph_level, graph_level, BackendConfig()->allow_gpu_memory_growth_,
         BackendConfig()->per_process_gpu_memory_fraction_,
         BackendConfig()->allow_soft_placement_,
         BackendConfig()->memory_limit_mb_, tftrt_config_ptr,
@@ -920,8 +932,9 @@ ModelState::CreateModel(
   } else {
     TRITONTF_Model* model = nullptr;
     RETURN_IF_TRITONTF_ERROR(TRITONTF_ModelCreateFromSavedModel(
-        &model, Name().c_str(), model_path.c_str(), device_id, has_graph_level,
-        graph_level, BackendConfig()->allow_gpu_memory_growth_,
+        &model, Name().c_str(), model_path.c_str(), device_id,
+        NumIntraThreads(), NumInterThreads(), UsePerSessionThreads(),
+        has_graph_level, graph_level, BackendConfig()->allow_gpu_memory_growth_,
         BackendConfig()->per_process_gpu_memory_fraction_,
         BackendConfig()->allow_soft_placement_,
         BackendConfig()->memory_limit_mb_, tftrt_config_ptr,
@@ -1004,12 +1017,15 @@ ModelState::Create(TRITONBACKEND_Model* triton_model, ModelState** state)
   }
 
   RETURN_IF_ERROR((*state)->ValidateModelConfig());
+  RETURN_IF_ERROR((*state)->ParseParameters());
 
   return nullptr;  // success
 }
 
 ModelState::ModelState(TRITONBACKEND_Model* triton_model)
-    : BackendModel(triton_model), max_session_share_count_(1)
+    : BackendModel(triton_model), max_session_share_count_(1),
+      num_intra_threads_(0), num_inter_threads_(0),
+      use_per_session_threads_(false)
 {
   // Obtain backend configuration
   TRITONBACKEND_Backend* backend;
@@ -1034,34 +1050,75 @@ ModelState::ModelState(TRITONBACKEND_Model* triton_model)
                                          Name() + "'")
                                             .c_str()));
   }
+}
 
-  // Validate and set parameters
+TRITONSERVER_Error*
+ModelState::ParseParameters()
+{
   triton::common::TritonJson::Value params;
   if (model_config_.Find("parameters", &params)) {
-    std::string max_shared_str;
-    // This is optional, so it is okay to have error (not found)
-    auto err =
-        GetParameterValue(params, "MAX_SESSION_SHARE_COUNT", &max_shared_str);
+    // These parameters are optional, so it is okay to have error (not found)
+    auto err = ParseParameter(
+        params, "MAX_SESSION_SHARE_COUNT", &max_session_share_count_);
     if (err != nullptr) {
       if (TRITONSERVER_ErrorCode(err) != TRITONSERVER_ERROR_NOT_FOUND) {
-        THROW_IF_BACKEND_MODEL_ERROR(err);
+        return err;
       } else {
         TRITONSERVER_ErrorDelete(err);
       }
-    } else {
-      int max_shared = 0;
-      THROW_IF_BACKEND_MODEL_ERROR(ParseIntValue(max_shared_str, &max_shared));
-      if (max_shared <= 0) {
-        throw BackendModelException(TRITONSERVER_ErrorNew(
-            TRITONSERVER_ERROR_INVALID_ARG,
-            (std::string("parameter 'MAX_SESSION_SHARE_COUNT' must be positive "
-                         "number for TensorFlow model '") +
-             Name() + "'")
-                .c_str()));
+    } else if (max_session_share_count_ <= 0) {
+      return TRITONSERVER_ErrorNew(
+          TRITONSERVER_ERROR_INVALID_ARG,
+          (std::string("parameter 'MAX_SESSION_SHARE_COUNT' must be positive "
+                       "number for TensorFlow model '") +
+           Name() + "'")
+              .c_str());
+    }
+
+    err = ParseParameter(params, "TF_NUM_INTRA_THREADS", &num_intra_threads_);
+    if (err != nullptr) {
+      if (TRITONSERVER_ErrorCode(err) != TRITONSERVER_ERROR_NOT_FOUND) {
+        return err;
+      } else {
+        TRITONSERVER_ErrorDelete(err);
       }
-      max_session_share_count_ = max_shared;
+    } else if (num_intra_threads_ < 0) {
+      return TRITONSERVER_ErrorNew(
+          TRITONSERVER_ERROR_INVALID_ARG,
+          (std::string("parameter 'TF_NUM_INTRA_THREADS' must be non-negative "
+                       "number for TensorFlow model '") +
+           Name() + "'")
+              .c_str());
+    }
+
+    err = ParseParameter(params, "TF_NUM_INTER_THREADS", &num_inter_threads_);
+    if (err != nullptr) {
+      if (TRITONSERVER_ErrorCode(err) != TRITONSERVER_ERROR_NOT_FOUND) {
+        return err;
+      } else {
+        TRITONSERVER_ErrorDelete(err);
+      }
+    } else if (num_inter_threads_ < 0) {
+      return TRITONSERVER_ErrorNew(
+          TRITONSERVER_ERROR_INVALID_ARG,
+          (std::string("parameter 'TF_NUM_INTER_THREADS' must be non-negative "
+                       "number for TensorFlow model '") +
+           Name() + "'")
+              .c_str());
+    }
+
+    err = ParseParameter(
+        params, "TF_USE_PER_SESSION_THREADS", &use_per_session_threads_);
+    if (err != nullptr) {
+      if (TRITONSERVER_ErrorCode(err) != TRITONSERVER_ERROR_NOT_FOUND) {
+        return err;
+      } else {
+        TRITONSERVER_ErrorDelete(err);
+      }
     }
   }
+
+  return nullptr;
 }
 
 // FIXME, where should just be methods in ModelState
@@ -1308,7 +1365,9 @@ ModelState::AutoCompleteConfig()
     if (exists) {
       err = TRITONTF_ModelCreateFromSavedModel(
           &tritontf_model, Name().c_str(), model_path.c_str(),
-          TRITONTF_NO_GPU_DEVICE, false /* have_graph */, 0 /* graph_level */,
+          TRITONTF_NO_GPU_DEVICE, 0 /* num_intra_threads */,
+          0 /* num_inter_threads */, false /* use_per_session_threads */,
+          false /* have_graph */, 0 /* graph_level */,
           backend_config_->allow_gpu_memory_growth_,
           backend_config_->per_process_gpu_memory_fraction_,
           backend_config_->allow_soft_placement_,

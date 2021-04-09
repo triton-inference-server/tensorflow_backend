@@ -293,4 +293,28 @@ ConvertDataType(TRITONSERVER_DataType dtype)
   return TRITONTF_DataType::TRITONTF_TYPE_INVALID;
 }
 
+TRITONSERVER_Error*
+ParseParameter(
+    triton::common::TritonJson::Value& params, const std::string& mkey,
+    bool* value)
+{
+  std::string value_str;
+  RETURN_IF_ERROR(GetParameterValue(params, mkey, &value_str));
+  RETURN_IF_ERROR(ParseBoolValue(value_str, value));
+
+  return nullptr;
+}
+
+TRITONSERVER_Error*
+ParseParameter(
+    triton::common::TritonJson::Value& params, const std::string& mkey,
+    int* value)
+{
+  std::string value_str;
+  RETURN_IF_ERROR(GetParameterValue(params, mkey, &value_str));
+  RETURN_IF_ERROR(ParseIntValue(value_str, value));
+
+  return nullptr;
+}
+
 }}}  // namespace triton::backend::tensorflow
