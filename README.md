@@ -169,8 +169,8 @@ TRITON_TENSORFLOW_DOCKER_IMAGE set to refer to the new Docker image.
 
 Configuration of Tensorflow for a model is done through the Parameters section of the model's 'config.pbtxt' file. The parameters and their description are as follows.
 
-* `TF_NUM_INTRA_THREADS`: Number of threads to use for inference on the CPU. Should be a non-negative number.
-* `TF_NUM_INTER_THREADS`: Number of threads to use for inference on the CPU. Should be a non-negative number.
+* `TF_NUM_INTRA_THREADS`: Number of threads to use to parallelize the execution of an individual op. Auto-configured by default. See [protobuf here](https://github.com/tensorflow/tensorflow/blob/6f72753a66d6abab8b839cc263a9f1329861f6f9/tensorflow/core/protobuf/config.proto#L393). Should be a non-negative number.
+* `TF_NUM_INTER_THREADS`: Controls the number of operators that can be executed simultaneously. Auto-configured by default. See [protobuf here](https://github.com/tensorflow/tensorflow/blob/6f72753a66d6abab8b839cc263a9f1329861f6f9/tensorflow/core/protobuf/config.proto#L404). Should be a non-negative number.
 * `TF_USE_PER_SESSION_THREADS`: Boolean value to see if per session thread is used. "True", "On" and "1" are accepted as true.
 * `TF_GRAPH_TAG`: Tag of the graphs to use. See [protobuf here](https://github.com/tensorflow/tensorflow/blob/6f72753a66d6abab8b839cc263a9f1329861f6f9/tensorflow/core/protobuf/meta_graph.proto#L56)
 * `TF_SIGNATURE_DEF`: Signature def to use. See [protobuf here](https://github.com/tensorflow/tensorflow/blob/6f72753a66d6abab8b839cc263a9f1329861f6f9/tensorflow/core/protobuf/meta_graph.proto#L260-L331)
