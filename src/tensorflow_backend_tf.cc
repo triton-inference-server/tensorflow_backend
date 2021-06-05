@@ -947,7 +947,7 @@ TRITONTF_ModelCreateFromSavedModel(
   // If user does not specify a 'tag' in the configuration file, use 'serve' as
   // default
   std::unordered_set<std::string> saved_model_tags;
-  const std::string TAG_TO_USE = (strcmp(graph_tag, "") == 0)
+  const std::string TAG_TO_USE = (strlen(graph_tag) == 0)
                                      ? tensorflow::kSavedModelTagServe
                                      : graph_tag;
   saved_model_tags.insert(TAG_TO_USE);
