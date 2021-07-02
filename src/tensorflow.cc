@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021, NVIDIA CORPORATION. All rights reserved.
+// Copyright 2020-2021, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions
@@ -470,9 +470,10 @@ ValidateTRITONTFModel(
 // specified.
 TRITONSERVER_Error*
 GetContiguousInputContent(
-    TRITONBACKEND_Input* rinput, const uint32_t buffer_count,
-    const char** content, size_t* content_byte_size, char** contiguous_buffer,
-    cudaStream_t stream, bool* cuda_copy)
+    TRITONBACKEND_Input* rinput, const char* host_policy_name,
+    const uint32_t buffer_count, const char** content,
+    size_t* content_byte_size, char** contiguous_buffer, cudaStream_t stream,
+    bool* cuda_copy)
 {
   *cuda_copy = false;
   *contiguous_buffer = nullptr;
@@ -487,9 +488,9 @@ GetContiguousInputContent(
     size_t src_byte_size;
     const void* src_ptr;
 
-    RETURN_IF_ERROR(TRITONBACKEND_InputBuffer(
-        rinput, idx, &src_ptr, &src_byte_size, &src_memory_type,
-        &src_memory_type_id));
+    RETURN_IF_ERROR(TRITONBACKEND_InputBufferForHostPolicy(
+        rinput, host_policy_name, idx, &src_ptr, &src_byte_size,
+        &src_memory_type, &src_memory_type_id));
 
     if (src_ptr != nullptr) {
       chunk_count++;
@@ -504,9 +505,9 @@ GetContiguousInputContent(
   } else if ((chunk_count == 1) && !type_mismatch) {
     TRITONSERVER_MemoryType src_memory_type;
     int64_t src_memory_type_id;
-    RETURN_IF_ERROR(TRITONBACKEND_InputBuffer(
-        rinput, 0, (const void**)content, content_byte_size, &src_memory_type,
-        &src_memory_type_id));
+    RETURN_IF_ERROR(TRITONBACKEND_InputBufferForHostPolicy(
+        rinput, host_policy_name, 0, (const void**)content, content_byte_size,
+        &src_memory_type, &src_memory_type_id));
   } else {
     *contiguous_buffer = (char*)malloc(total_byte_size);
 
@@ -518,9 +519,9 @@ GetContiguousInputContent(
       size_t src_byte_size;
       const void* src_ptr;
 
-      RETURN_IF_ERROR(TRITONBACKEND_InputBuffer(
-          rinput, i, &src_ptr, &src_byte_size, &src_memory_type,
-          &src_memory_type_id));
+      RETURN_IF_ERROR(TRITONBACKEND_InputBufferForHostPolicy(
+          rinput, host_policy_name, i, &src_ptr, &src_byte_size,
+          &src_memory_type, &src_memory_type_id));
       RETURN_IF_ERROR(CopyBuffer(
           "Contiguous input", src_memory_type, src_memory_type_id,
           TRITONSERVER_MEMORY_CPU, 0, src_byte_size, src_ptr,
@@ -549,7 +550,7 @@ SetStringInputTensor(
     TRITONTF_Tensor* tensor, TRITONBACKEND_Input* input, const char* name,
     const uint32_t buffer_count, const size_t request_element_cnt,
     const size_t tensor_offset, TRITONBACKEND_Response** response,
-    cudaStream_t stream)
+    cudaStream_t stream, const char* host_policy_name)
 {
   bool cuda_copy = false;
   size_t element_idx = 0;
@@ -563,8 +564,8 @@ SetStringInputTensor(
 
   char* contiguous_buffer = nullptr;
   auto err = GetContiguousInputContent(
-      input, buffer_count, &content, &content_byte_size, &contiguous_buffer,
-      stream, &cuda_copy);
+      input, host_policy_name, buffer_count, &content, &content_byte_size,
+      &contiguous_buffer, stream, &cuda_copy);
   if (err != nullptr) {
     RESPOND_AND_SET_NULL_IF_ERROR(response, err);
     FillStringTensor(
@@ -1683,7 +1684,8 @@ ModelInstanceState::ProcessRequests(
   BackendInputCollector collector(
       requests, request_count, &responses,
       StateForModel()->TritonMemoryManager(),
-      StateForModel()->EnablePinnedInput(), CudaStream());
+      StateForModel()->EnablePinnedInput(), CudaStream(), nullptr, nullptr, 0,
+      HostPolicyName().c_str());
   {
     // All requests must have equally-sized input tensors so use the first
     // request as the representative for the input tensors.
@@ -1786,15 +1788,17 @@ ModelInstanceState::ProcessRequests(
           uint32_t dims_count;
           uint32_t buffer_count;
           RESPOND_AND_SET_NULL_IF_ERROR(
-              &responses[idx], TRITONBACKEND_InputProperties(
-                                   input, nullptr, nullptr, &shape, &dims_count,
-                                   nullptr, &buffer_count));
+              &responses[idx],
+              TRITONBACKEND_InputPropertiesForHostPolicy(
+                  input, HostPolicyName().c_str(), nullptr, nullptr, &shape,
+                  &dims_count, nullptr, &buffer_count));
 
           const int64_t batch_element_cnt = GetElementCount(shape, dims_count);
 
           cuda_copy |= SetStringInputTensor(
               tensor, input, name, buffer_count, batch_element_cnt,
-              tensor_offset, &responses[idx], CudaStream());
+              tensor_offset, &responses[idx], CudaStream(),
+              HostPolicyName().c_str());
           tensor_offset += batch_element_cnt;
         }
       }
