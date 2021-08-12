@@ -74,7 +74,7 @@ See [build instructions](#build-the-tensorflow-backend) below.
 ### Can I use any version of TensorFlow when building the backend?
 
 Currently you must use a version of TensorFlow from
-[NGC](https://ngc.nvidia.com). See [custom TensorFlow build
+[NGC](ngc.nvidia.com). See [custom TensorFlow build
 instructions](#build-the-tensorflow-backend-with-custom-tensorflow)
 below.
 
@@ -110,7 +110,7 @@ $ apt-get install patchelf rapidjson-dev
 
 The backend can be built to support either TensorFlow 1.x or
 TensorFlow 2.x. An appropriate TensorFlow container from
-[NGC](https://ngc.nvidia.com) must be used. For example, to build a backend
+[NGC](ngc.nvidia.com) must be used. For example, to build a backend
 that uses the 21.02 version of the TensorFlow 1.x container from NGC:
 
 ```
@@ -143,7 +143,7 @@ but the listed CMake argument can be used to override.
 Currently, Triton requires that a specially patched version of
 TensorFlow be used with the TensorFlow backend. The full source for
 these TensorFlow versions are available as Docker images from
-[NGC](https://ngc.nvidia.com). For example, the TensorFlow 1.x version
+[NGC](ngc.nvidia.com). For example, the TensorFlow 1.x version
 compatible with the 21.02 release of Triton is available as
 nvcr.io/nvidia/tensorflow:21.02-tf1-py3 and the TensorFlow 2.x version
 compatible with the 21.02 release of Triton is available as
