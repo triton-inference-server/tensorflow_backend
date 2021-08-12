@@ -85,7 +85,7 @@ ValidateSequenceControl(
   if (is_boolean) {
     RETURN_IF_ERROR(GetBooleanSequenceControlProperties(
         sequence_batching, model_name, control_kind, required, &tensor_name,
-        nullptr, nullptr, nullptr, nullptr, nullptr));
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr));
   } else {
     RETURN_IF_ERROR(GetTypedSequenceControlProperties(
         sequence_batching, model_name, control_kind, required, &tensor_name,
@@ -194,7 +194,8 @@ ValidateSequenceControl(
   if (is_boolean) {
     RETURN_IF_ERROR(GetBooleanSequenceControlProperties(
         sequence_batching, model_name, control_kind, required, &tensor_name,
-        &tensor_datatype, nullptr, nullptr, nullptr, nullptr));
+        &tensor_datatype, nullptr, nullptr, nullptr, nullptr, nullptr,
+        nullptr));
   } else {
     RETURN_IF_ERROR(GetTypedSequenceControlProperties(
         sequence_batching, model_name, control_kind, required, &tensor_name,
