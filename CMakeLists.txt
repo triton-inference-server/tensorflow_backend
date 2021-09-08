@@ -207,7 +207,8 @@ target_link_libraries(
 if (${TRITON_TENSORFLOW_DOCKER_BUILD})
   target_link_libraries(
     triton-tensorflow-backend
-    PRIVATE tflib
+    PRIVATE
+      tflib
   )
 else()
   target_link_libraries(
@@ -250,7 +251,6 @@ if (${TRITON_TENSORFLOW_DOCKER_BUILD})
   install(
     CODE
       "EXECUTE_PROCESS(
-        COMMAND patchelf --set-rpath '$ORIGIN' ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
         COMMAND ln -sf ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_LIBNAME}
         COMMAND ln -sf ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} libtensorflow_framework.so.${TRITON_TENSORFLOW_VERSION}
         COMMAND ln -sf libtensorflow_framework.so.${TRITON_TENSORFLOW_VERSION} libtensorflow_framework.so
