@@ -66,7 +66,6 @@ endif()
 
 set(TRITON_TENSORFLOW_LIBNAME "libtensorflow_triton.so")
 set(TRITON_TENSORFLOW_LDFLAGS "-ltensorflow_triton")
-set(TRITON_TENSORFLOW_EXTRA_LIBPATH "/usr/local/lib/python3.8/dist-packages/_solib_local/_U@mkl_Ulinux_S_S_Cmkl_Ulibs_Ulinux___Uexternal_Smkl_Ulinux_Slib")
 
 #
 # Dependencies
@@ -119,15 +118,11 @@ if (${TRITON_TENSORFLOW_DOCKER_BUILD})
   add_custom_command(
     OUTPUT
       ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
-      libiomp5.so
-      libmklml_intel.so
       LICENSE.tensorflow
     COMMAND docker pull ${TRITON_TENSORFLOW_DOCKER_IMAGE}
     COMMAND docker rm tensorflow_backend_tflib || echo "error ignored..." || true
     COMMAND docker create --name tensorflow_backend_tflib ${TRITON_TENSORFLOW_DOCKER_IMAGE}
     COMMAND docker cp tensorflow_backend_tflib:/usr/local/lib/tensorflow/${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
-    COMMAND docker cp tensorflow_backend_tflib:${TRITON_TENSORFLOW_EXTRA_LIBPATH}/libiomp5.so libiomp5.so
-    COMMAND docker cp tensorflow_backend_tflib:${TRITON_TENSORFLOW_EXTRA_LIBPATH}/libmklml_intel.so libmklml_intel.so
     COMMAND docker cp tensorflow_backend_tflib:/opt/tensorflow/tensorflow-source/LICENSE LICENSE.tensorflow
     COMMAND docker rm tensorflow_backend_tflib
     COMMENT "Extracting ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} from ${TRITON_TENSORFLOW_DOCKER_IMAGE}"
@@ -212,8 +207,7 @@ target_link_libraries(
 if (${TRITON_TENSORFLOW_DOCKER_BUILD})
   target_link_libraries(
     triton-tensorflow-backend
-    PRIVATE
-      tflib
+    PRIVATE tflib
   )
 else()
   target_link_libraries(
@@ -249,8 +243,6 @@ if (${TRITON_TENSORFLOW_DOCKER_BUILD})
   install(
     FILES
       ${CMAKE_CURRENT_BINARY_DIR}/${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
-      ${CMAKE_CURRENT_BINARY_DIR}/libiomp5.so
-      ${CMAKE_CURRENT_BINARY_DIR}/libmklml_intel.so
       ${CMAKE_CURRENT_BINARY_DIR}/LICENSE.tensorflow
     DESTINATION ${TRITON_TENSORFLOW_BACKEND_INSTALLDIR}
   )
@@ -258,6 +250,7 @@ if (${TRITON_TENSORFLOW_DOCKER_BUILD})
   install(
     CODE
       "EXECUTE_PROCESS(
+        COMMAND patchelf --set-rpath '$ORIGIN' ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
         COMMAND ln -sf ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_LIBNAME}
         COMMAND ln -sf ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} libtensorflow_framework.so.${TRITON_TENSORFLOW_VERSION}
         COMMAND ln -sf libtensorflow_framework.so.${TRITON_TENSORFLOW_VERSION} libtensorflow_framework.so
