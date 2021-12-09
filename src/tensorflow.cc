@@ -1331,6 +1331,12 @@ AutoCompleteHelper::FixIOConfig(
     triton::common::TritonJson::Value dims(
         model_state_->ModelConfig(),
         triton::common::TritonJson::ValueType::ARRAY);
+    RETURN_ERROR_IF_TRUE(
+        io->shape_->rank_ == 0, TRITONSERVER_ERROR_INVALID_ARG,
+        std::string(
+            "unable to autofill for '" + model_state_->Name() +
+            "': the rank of model tensor '" + io->name_ +
+            "' is 0 which is not supported"));
     // The model signature supports batching then the first
     // dimension is -1 and should not appear in the model
     // configuration 'dims' that we are creating.
