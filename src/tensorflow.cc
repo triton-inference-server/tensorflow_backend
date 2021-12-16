@@ -2011,8 +2011,8 @@ ModelInstanceState::ProcessRequests(
   // The serialized string buffer must be valid until output copies are done
   std::vector<std::unique_ptr<std::string>> string_buffer;
   BackendOutputResponder responder(
-      requests, request_count, &responses, max_batch_size,
-      StateForModel()->TritonMemoryManager(),
+      requests, request_count, &responses,
+      StateForModel()->TritonMemoryManager(), max_batch_size > 0,
       StateForModel()->EnablePinnedOutput(), CudaStream());
   {
     TRITONTF_TensorList* output_tensor_itr = output_tensors.get();
