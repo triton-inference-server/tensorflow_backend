@@ -58,13 +58,14 @@ message(STATUS "Using Tensorflow docker: ${TRITON_TENSORFLOW_DOCKER_BUILD}")
 set(TRITON_TENSORFLOW_CC_LIBNAME "libtensorflow_cc.so")
 set(TRITON_TENSORFLOW_FW_LIBNAME "libtensorflow_framework.so")
 set(TRITON_TENSORFLOW_LDFLAGS "-ltensorflow_cc -ltensorflow_framework")
-
 if(${TRITON_TENSORFLOW_VERSION} EQUAL "1")
   set(TRITON_TENSORFLOW_BACKEND_LIBNAME triton_tensorflow1)
   set(TRITON_TENSORFLOW_BACKEND_INSTALLDIR ${CMAKE_INSTALL_PREFIX}/backends/tensorflow1)
+  set(TRITON_TENSORFLOW_PYTHON_PATH "/usr/local/lib/python3.8/dist-packages/tensorflow_core")
 elseif(${TRITON_TENSORFLOW_VERSION} EQUAL "2")
   set(TRITON_TENSORFLOW_BACKEND_LIBNAME triton_tensorflow2)
   set(TRITON_TENSORFLOW_BACKEND_INSTALLDIR ${CMAKE_INSTALL_PREFIX}/backends/tensorflow2)
+  set(TRITON_TENSORFLOW_PYTHON_PATH "/usr/local/lib/python3.8/dist-packages/tensorflow")
 else()
   message(FATAL_ERROR "TRITON_TENSORFLOW_VERSION allowed values are '1' and '2'")
 endif()
@@ -126,7 +127,7 @@ if (${TRITON_TENSORFLOW_DOCKER_BUILD})
     COMMAND docker rm tensorflow_backend_tflib || echo "error ignored..." || true
     COMMAND docker create --name tensorflow_backend_tflib ${TRITON_TENSORFLOW_DOCKER_IMAGE}
     COMMAND docker cp tensorflow_backend_tflib:/usr/local/lib/tensorflow/${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
-    COMMAND docker cp tensorflow_backend_tflib:/usr/local/lib/python3.8/dist-packages/tensorflow/${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
+    COMMAND docker cp tensorflow_backend_tflib:${TRITON_TENSORFLOW_PYTHON_PATH}/${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
     COMMAND docker cp tensorflow_backend_tflib:/opt/tensorflow/tensorflow-source/LICENSE LICENSE.tensorflow
     COMMAND docker rm tensorflow_backend_tflib
     COMMENT "Extracting ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION} and ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} from ${TRITON_TENSORFLOW_DOCKER_IMAGE}"
