@@ -55,17 +55,17 @@ if(TRITON_TENSORFLOW_LIB_PATHS STREQUAL "")
 endif()
 message(STATUS "Using Tensorflow docker: ${TRITON_TENSORFLOW_DOCKER_BUILD}")
 
-set(TRITON_TENSORFLOW_CC_LIBNAME "libtensorflow_cc.so")
-set(TRITON_TENSORFLOW_FW_LIBNAME "libtensorflow_framework.so")
-set(TRITON_TENSORFLOW_LDFLAGS "-ltensorflow_cc -ltensorflow_framework")
 if(${TRITON_TENSORFLOW_VERSION} EQUAL "1")
   set(TRITON_TENSORFLOW_BACKEND_LIBNAME triton_tensorflow1)
+  set(TRITON_TENSORFLOW_LIBNAME "libtensorflow_triton.so")
+  set(TRITON_TENSORFLOW_LDFLAGS "-ltensorflow_triton")
   set(TRITON_TENSORFLOW_BACKEND_INSTALLDIR ${CMAKE_INSTALL_PREFIX}/backends/tensorflow1)
-  set(TRITON_TENSORFLOW_PYTHON_PATH "/usr/local/lib/python3.8/dist-packages/tensorflow_core")
 elseif(${TRITON_TENSORFLOW_VERSION} EQUAL "2")
   set(TRITON_TENSORFLOW_BACKEND_LIBNAME triton_tensorflow2)
+  set(TRITON_TENSORFLOW_CC_LIBNAME "libtensorflow_cc.so")
+  set(TRITON_TENSORFLOW_FW_LIBNAME "libtensorflow_framework.so")
+  set(TRITON_TENSORFLOW_LDFLAGS "-ltensorflow_cc -ltensorflow_framework")
   set(TRITON_TENSORFLOW_BACKEND_INSTALLDIR ${CMAKE_INSTALL_PREFIX}/backends/tensorflow2)
-  set(TRITON_TENSORFLOW_PYTHON_PATH "/usr/local/lib/python3.8/dist-packages/tensorflow")
 else()
   message(FATAL_ERROR "TRITON_TENSORFLOW_VERSION allowed values are '1' and '2'")
 endif()
@@ -118,43 +118,72 @@ endif() # TRITON_ENABLE_GPU
 configure_file(src/libtriton_tensorflow.ldscript libtriton_tensorflow.ldscript COPYONLY)
 
 if (${TRITON_TENSORFLOW_DOCKER_BUILD})
-  add_custom_command(
-    OUTPUT
-      ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
-      ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
-      LICENSE.tensorflow
-    COMMAND docker pull ${TRITON_TENSORFLOW_DOCKER_IMAGE}
-    COMMAND docker rm tensorflow_backend_tflib || echo "error ignored..." || true
-    COMMAND docker create --name tensorflow_backend_tflib ${TRITON_TENSORFLOW_DOCKER_IMAGE}
-    COMMAND docker cp tensorflow_backend_tflib:/usr/local/lib/tensorflow/${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
-    COMMAND docker cp tensorflow_backend_tflib:${TRITON_TENSORFLOW_PYTHON_PATH}/${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
-    COMMAND docker cp tensorflow_backend_tflib:/opt/tensorflow/tensorflow-source/LICENSE LICENSE.tensorflow
-    COMMAND docker rm tensorflow_backend_tflib
-    COMMENT "Extracting ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION} and ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} from ${TRITON_TENSORFLOW_DOCKER_IMAGE}"
-  )
+  if(${TRITON_TENSORFLOW_VERSION} EQUAL "1")
+    add_custom_command(
+      OUTPUT
+        ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
+        LICENSE.tensorflow
+      COMMAND docker pull ${TRITON_TENSORFLOW_DOCKER_IMAGE}
+      COMMAND docker rm tensorflow_backend_tflib || echo "error ignored..." || true
+      COMMAND docker create --name tensorflow_backend_tflib ${TRITON_TENSORFLOW_DOCKER_IMAGE}
+      COMMAND docker cp tensorflow_backend_tflib:/usr/local/lib/tensorflow/${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
+      COMMAND docker cp tensorflow_backend_tflib:/opt/tensorflow/tensorflow-source/LICENSE LICENSE.tensorflow
+      COMMAND docker rm tensorflow_backend_tflib
+      COMMENT "Extracting ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} from ${TRITON_TENSORFLOW_DOCKER_IMAGE}"
+    )
 
-  add_custom_target(
-    tflib_target
-    DEPENDS
-      ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
-      ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
-  )
+    add_custom_target(
+      tflib_target
+      DEPENDS
+        ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
+    )
 
-  add_library(tflib_cc SHARED IMPORTED GLOBAL)
-  add_dependencies(tflib_cc tflib_target)
-  set_target_properties(
-    tflib_cc
-    PROPERTIES
-      IMPORTED_LOCATION ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
-  )
+    add_library(tflib SHARED IMPORTED GLOBAL)
+    add_dependencies(tflib tflib_target)
+    set_target_properties(
+      tflib
+      PROPERTIES
+        IMPORTED_LOCATION ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
+    )
+  elseif(${TRITON_TENSORFLOW_VERSION} EQUAL "2")
+    add_custom_command(
+      OUTPUT
+        ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
+        ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
+        LICENSE.tensorflow
+      COMMAND docker pull ${TRITON_TENSORFLOW_DOCKER_IMAGE}
+      COMMAND docker rm tensorflow_backend_tflib || echo "error ignored..." || true
+      COMMAND docker create --name tensorflow_backend_tflib ${TRITON_TENSORFLOW_DOCKER_IMAGE}
+      COMMAND docker cp tensorflow_backend_tflib:/usr/local/lib/tensorflow/${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
+      COMMAND docker cp tensorflow_backend_tflib:/usr/local/lib/python3.8/dist-packages/tensorflow/${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
+      COMMAND docker cp tensorflow_backend_tflib:/opt/tensorflow/tensorflow-source/LICENSE LICENSE.tensorflow
+      COMMAND docker rm tensorflow_backend_tflib
+      COMMENT "Extracting ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION} and ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} from ${TRITON_TENSORFLOW_DOCKER_IMAGE}"
+    )
 
-  add_library(tflib_fw SHARED IMPORTED GLOBAL)
-  add_dependencies(tflib_fw tflib_target)
-  set_target_properties(
-    tflib_fw
-    PROPERTIES
-      IMPORTED_LOCATION ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
-  )
+    add_custom_target(
+      tflib_target
+      DEPENDS
+        ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
+        ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
+    )
+
+    add_library(tflib_cc SHARED IMPORTED GLOBAL)
+    add_dependencies(tflib_cc tflib_target)
+    set_target_properties(
+      tflib_cc
+      PROPERTIES
+        IMPORTED_LOCATION ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
+    )
+
+    add_library(tflib_fw SHARED IMPORTED GLOBAL)
+    add_dependencies(tflib_fw tflib_target)
+    set_target_properties(
+      tflib_fw
+      PROPERTIES
+        IMPORTED_LOCATION ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
+    )
+  endif()
 endif() # TRITON_TENSORFLOW_DOCKER_BUILD
 
 add_library(
@@ -225,12 +254,20 @@ target_link_libraries(
 )
 
 if (${TRITON_TENSORFLOW_DOCKER_BUILD})
-  target_link_libraries(
-    triton-tensorflow-backend
-    PRIVATE
-      tflib_cc
-      tflib_fw
-  )
+  if(${TRITON_TENSORFLOW_VERSION} EQUAL "1")
+    target_link_libraries(
+      triton-tensorflow-backend
+      PRIVATE
+        tflib
+    )
+  elseif(${TRITON_TENSORFLOW_VERSION} EQUAL "2")
+    target_link_libraries(
+      triton-tensorflow-backend
+      PRIVATE
+        tflib_cc
+        tflib_fw
+    )
+  endif()
 else()
   target_link_libraries(
     triton-tensorflow-backend
@@ -262,24 +299,47 @@ install(
 )
 
 if (${TRITON_TENSORFLOW_DOCKER_BUILD})
-  install(
-    FILES
-      ${CMAKE_CURRENT_BINARY_DIR}/${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
-      ${CMAKE_CURRENT_BINARY_DIR}/${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
-      ${CMAKE_CURRENT_BINARY_DIR}/LICENSE.tensorflow
-    DESTINATION ${TRITON_TENSORFLOW_BACKEND_INSTALLDIR}
-  )
-  install(
-    CODE
-      "EXECUTE_PROCESS(
-        COMMAND ln -sf ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_CC_LIBNAME}
-        COMMAND ln -sf ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_FW_LIBNAME}
-        RESULT_VARIABLE TTB_INSTALL_STATUS
-        WORKING_DIRECTORY ${TRITON_TENSORFLOW_BACKEND_INSTALLDIR})
-      if(TTB_INSTALL_STATUS AND NOT TTB_INSTALL_STATUS EQUAL 0)
-        message(FATAL_ERROR \"FAILED: to run patchelf and create links\")
-      endif()"
-  )
+  if(${TRITON_TENSORFLOW_VERSION} EQUAL "1")
+    install(
+      FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
+        ${CMAKE_CURRENT_BINARY_DIR}/LICENSE.tensorflow
+      DESTINATION ${TRITON_TENSORFLOW_BACKEND_INSTALLDIR}
+    )
+    install(
+      CODE
+       "EXECUTE_PROCESS(
+          COMMAND ln -sf ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_LIBNAME}
+          COMMAND ln -sf ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} libtensorflow_framework.so.${TRITON_TENSORFLOW_VERSION}
+          COMMAND ln -sf libtensorflow_framework.so.${TRITON_TENSORFLOW_VERSION} libtensorflow_framework.so
+          COMMAND ln -sf ${TRITON_TENSORFLOW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} libtensorflow_cc.so.${TRITON_TENSORFLOW_VERSION}
+          COMMAND ln -sf libtensorflow_cc.so.${TRITON_TENSORFLOW_VERSION} libtensorflow_cc.so
+          RESULT_VARIABLE TTB_INSTALL_STATUS
+          WORKING_DIRECTORY ${TRITON_TENSORFLOW_BACKEND_INSTALLDIR})
+        if(TTB_INSTALL_STATUS AND NOT TTB_INSTALL_STATUS EQUAL 0)
+          message(FATAL_ERROR \"FAILED: to run patchelf and create links\")
+        endif()"
+    )
+  elseif(${TRITON_TENSORFLOW_VERSION} EQUAL "2")
+    install(
+      FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
+        ${CMAKE_CURRENT_BINARY_DIR}/${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
+        ${CMAKE_CURRENT_BINARY_DIR}/LICENSE.tensorflow
+      DESTINATION ${TRITON_TENSORFLOW_BACKEND_INSTALLDIR}
+    )
+    install(
+      CODE
+        "EXECUTE_PROCESS(
+          COMMAND ln -sf ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_CC_LIBNAME}
+          COMMAND ln -sf ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_FW_LIBNAME}
+          RESULT_VARIABLE TTB_INSTALL_STATUS
+          WORKING_DIRECTORY ${TRITON_TENSORFLOW_BACKEND_INSTALLDIR})
+        if(TTB_INSTALL_STATUS AND NOT TTB_INSTALL_STATUS EQUAL 0)
+          message(FATAL_ERROR \"FAILED: to run patchelf and create links\")
+        endif()"
+    )
+  endif()
 endif() # TRITON_TENSORFLOW_DOCKER_BUILD
 
 install(
