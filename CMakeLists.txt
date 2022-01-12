@@ -35,6 +35,7 @@ option(TRITON_ENABLE_GPU "Enable GPU support in backend." ON)
 option(TRITON_ENABLE_STATS "Include statistics collections in backend." ON)
 set(TRITON_TENSORFLOW_VERSION "1" CACHE STRING "TensorFlow version, must be '1' or '2'.")
 set(TRITON_TENSORFLOW_DOCKER_IMAGE "" CACHE STRING "Docker image containing the TensorFlow build required by backend.")
+option(TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS "Install extra dependencies directly into the TensorFlow backend, instead of assuming they are present on the system." OFF)
 set(TRITON_TENSORFLOW_LIB_PATHS "" CACHE PATH "Paths to TensorFlow libraries. Multiple paths may be specified by separating them with a semicolon.")
 set(TRITON_TENSORFLOW_INCLUDE_PATHS "" CACHE PATH "Paths to TensorFlow includes. Multiple paths may be specified by separating them with a semicolon.")
 
@@ -130,6 +131,15 @@ if (${TRITON_TENSORFLOW_DOCKER_BUILD})
     COMMAND docker cp tensorflow_backend_tflib:${TRITON_TENSORFLOW_PYTHON_PATH}/${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
     COMMAND docker cp tensorflow_backend_tflib:/opt/tensorflow/tensorflow-source/LICENSE LICENSE.tensorflow
     COMMAND docker rm tensorflow_backend_tflib
+
+    COMMAND docker stop tensorflow_backend_deps || echo "error ignored..." || true
+    COMMAND docker rm tensorflow_backend_deps || echo "error ignored..." || true
+    COMMAND docker run -it -d --name tensorflow_backend_deps gitlab-master.nvidia.com:5005/dl/dgx/tensorflow:master-py3-base
+    COMMAND mkdir tf_backend_deps
+    COMMAND docker exec tensorflow_backend_deps sh -c  "tar -cf - /usr/lib/x86_64-linux-gnu/libnccl.so*" | tar --strip-components=3 -xf - -C ./tf_backend_deps
+    COMMAND docker stop tensorflow_backend_deps
+    COMMAND docker rm tensorflow_backend_deps
+
     COMMENT "Extracting ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION} and ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} from ${TRITON_TENSORFLOW_DOCKER_IMAGE}"
   )
 
@@ -280,6 +290,13 @@ if (${TRITON_TENSORFLOW_DOCKER_BUILD})
         message(FATAL_ERROR \"FAILED: to run patchelf and create links\")
       endif()"
   )
+
+  if(${TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS})
+    install(
+      DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/tf_backend_deps/
+      DESTINATION ${TRITON_TENSORFLOW_BACKEND_INSTALLDIR}
+    )
+  endif() # TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS
 endif() # TRITON_TENSORFLOW_DOCKER_BUILD
 
 install(
