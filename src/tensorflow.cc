@@ -321,7 +321,7 @@ ValidateTRITONTFModel(
         std::string(
             "unable to load model '" + model_name +
             "', configuration expects " +
-            std::to_string(config_inputs.ArraySize()) +
+            std::to_string(expected_input_cnt) +
             " inputs, model provides " + std::to_string(expected_inputs.size()))
             .c_str());
   }
