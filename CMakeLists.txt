@@ -106,11 +106,6 @@ if(${TRITON_ENABLE_GPU})
   find_package(CUDAToolkit REQUIRED)
 endif() # TRITON_ENABLE_GPU
 
-# Install NCCL as extra dependency
-if(${TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS})
-  set(EXTRA_LIBS "libnccl.so")
-endif() # TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS
-
 #
 # Shared library implementing the Triton Backend API
 #
@@ -129,15 +124,20 @@ if (${TRITON_TENSORFLOW_DOCKER_BUILD})
       ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
       ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
       LICENSE.tensorflow
-      ${EXTRA_LIBS}
     COMMAND docker pull ${TRITON_TENSORFLOW_DOCKER_IMAGE}
     COMMAND docker rm tensorflow_backend_tflib || echo "error ignored..." || true
     COMMAND docker create --name tensorflow_backend_tflib ${TRITON_TENSORFLOW_DOCKER_IMAGE}
     COMMAND docker cp tensorflow_backend_tflib:/usr/local/lib/tensorflow/${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
     COMMAND docker cp tensorflow_backend_tflib:${TRITON_TENSORFLOW_PYTHON_PATH}/${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
     COMMAND docker cp tensorflow_backend_tflib:/opt/tensorflow/tensorflow-source/LICENSE LICENSE.tensorflow
-    COMMAND if [ "${TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS}" = "ON" ] \; then docker cp tensorflow_backend_tflib:/usr/lib/x86_64-linux-gnu/libnccl.so.2.11.4 libnccl.so \; fi \;
     COMMAND docker rm tensorflow_backend_tflib
+
+    COMMAND docker stop tensorflow_backend_deps || echo "error ignored..." || true
+    COMMAND docker rm tensorflow_backend_deps || echo "error ignored..." || true
+    COMMAND if [ "${TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS}" = "ON" ] \; then mkdir tf_backend_deps && docker run -it -d --name tensorflow_backend_deps ${TRITON_TENSORFLOW_DOCKER_IMAGE} \; fi \;
+    COMMAND if [ "${TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS}" = "ON" ] \; then docker exec tensorflow_backend_deps sh -c  "tar -cf - /usr/lib/x86_64-linux-gnu/libnccl.so*" | tar --strip-components=3 -xf - -C ./tf_backend_deps \; fi
+    COMMAND if [ "${TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS}" = "ON" ] \; then docker stop tensorflow_backend_deps && docker rm tensorflow_backend_deps \; fi \;
+
     COMMENT "Extracting ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION} and ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} from ${TRITON_TENSORFLOW_DOCKER_IMAGE}"
   )
 
@@ -290,21 +290,9 @@ if (${TRITON_TENSORFLOW_DOCKER_BUILD})
   )
 
   if(${TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS})
-    FOREACH(extralib ${EXTRA_LIBS})
-      install(
-        FILES ${CMAKE_CURRENT_BINARY_DIR}/${extralib}
-        DESTINATION ${TRITON_TENSORFLOW_BACKEND_INSTALLDIR}
-      )
-    ENDFOREACH(extralib)
     install(
-      CODE
-        "EXECUTE_PROCESS(
-          COMMAND ln -sf libnccl.so libnccl.so.2
-          RESULT_VARIABLE NCCL_INSTALL_STATUS
-          WORKING_DIRECTORY ${TRITON_TENSORFLOW_BACKEND_INSTALLDIR})
-        if(NCCL_INSTALL_STATUS AND NOT NCCL_INSTALL_STATUS EQUAL 0)
-          message(FATAL_ERROR \"FAILED: to create links\")
-        endif()"
+      DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/tf_backend_deps/
+      DESTINATION ${TRITON_TENSORFLOW_BACKEND_INSTALLDIR}
     )
   endif() # TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS
 endif() # TRITON_TENSORFLOW_DOCKER_BUILD
