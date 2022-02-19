@@ -1,4 +1,4 @@
-# Copyright 2020-2021, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright 2020-2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -134,11 +134,9 @@ if (${TRITON_TENSORFLOW_DOCKER_BUILD})
 
     COMMAND docker stop tensorflow_backend_deps || echo "error ignored..." || true
     COMMAND docker rm tensorflow_backend_deps || echo "error ignored..." || true
-    COMMAND docker run -it -d --name tensorflow_backend_deps gitlab-master.nvidia.com:5005/dl/dgx/tensorflow:master-py3-base
-    COMMAND mkdir tf_backend_deps
-    COMMAND docker exec tensorflow_backend_deps sh -c  "tar -cf - /usr/lib/x86_64-linux-gnu/libnccl.so*" | tar --strip-components=3 -xf - -C ./tf_backend_deps
-    COMMAND docker stop tensorflow_backend_deps
-    COMMAND docker rm tensorflow_backend_deps
+    COMMAND if [ "${TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS}" = "ON" ] \; then mkdir tf_backend_deps && docker run -it -d --name tensorflow_backend_deps ${TRITON_TENSORFLOW_DOCKER_IMAGE} \; fi \;
+    COMMAND if [ "${TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS}" = "ON" ] \; then docker exec tensorflow_backend_deps sh -c  "tar -cf - /usr/lib/x86_64-linux-gnu/libnccl.so*" | tar --strip-components=3 -xf - -C ./tf_backend_deps \; fi
+    COMMAND if [ "${TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS}" = "ON" ] \; then docker stop tensorflow_backend_deps && docker rm tensorflow_backend_deps \; fi \;
 
     COMMENT "Extracting ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION} and ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} from ${TRITON_TENSORFLOW_DOCKER_IMAGE}"
   )
