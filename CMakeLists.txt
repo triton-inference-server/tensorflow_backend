@@ -123,6 +123,7 @@ if (${TRITON_TENSORFLOW_DOCKER_BUILD})
     set(LIBS_ARCH "aarch64")
   else()
     set(LIBS_ARCH "x86_64")
+  endif()
 
   add_custom_command(
     OUTPUT
