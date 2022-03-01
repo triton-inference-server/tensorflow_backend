@@ -119,6 +119,11 @@ endif() # TRITON_ENABLE_GPU
 configure_file(src/libtriton_tensorflow.ldscript libtriton_tensorflow.ldscript COPYONLY)
 
 if (${TRITON_TENSORFLOW_DOCKER_BUILD})
+  if (CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "aarch64")
+    set(LIBS_ARCH "aarch64")
+  else()
+    set(LIBS_ARCH "x86_64")
+
   add_custom_command(
     OUTPUT
       ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
@@ -135,7 +140,7 @@ if (${TRITON_TENSORFLOW_DOCKER_BUILD})
     COMMAND docker stop tensorflow_backend_deps || echo "error ignored..." || true
     COMMAND docker rm tensorflow_backend_deps || echo "error ignored..." || true
     COMMAND if [ "${TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS}" = "ON" ] \; then mkdir tf_backend_deps && docker run -it -d --name tensorflow_backend_deps ${TRITON_TENSORFLOW_DOCKER_IMAGE} \; fi \;
-    COMMAND if [ "${TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS}" = "ON" ] \; then docker exec tensorflow_backend_deps sh -c  "tar -cf - /usr/lib/x86_64-linux-gnu/libnccl.so*" | tar --strip-components=3 -xf - -C ./tf_backend_deps \; fi
+    COMMAND if [ "${TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS}" = "ON" ] \; then docker exec tensorflow_backend_deps sh -c  "tar -cf - /usr/lib/${LIBS_ARCH}-linux-gnu/libnccl.so*" | tar --strip-components=3 -xf - -C ./tf_backend_deps \; fi
     COMMAND if [ "${TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS}" = "ON" ] \; then docker stop tensorflow_backend_deps && docker rm tensorflow_backend_deps \; fi \;
 
     COMMENT "Extracting ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION} and ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} from ${TRITON_TENSORFLOW_DOCKER_IMAGE}"
