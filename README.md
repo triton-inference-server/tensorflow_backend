@@ -1,5 +1,5 @@
 <!--
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright 2020-2022, NVIDIA CORPORATION. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -154,7 +154,7 @@ the shared libraries needed by the Triton TensorFlow backend. In the
 TensorFlow 1.x or TensorFlow 2.x container you rebuild using:
 
 ```
-$ ./nvbuild.sh --python3.6 --triton
+$ ./nvbuild.sh
 ```
 
 After rebuilding within the container you should save the updated
