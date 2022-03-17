@@ -1285,7 +1285,7 @@ AutoCompleteHelper::FixBatchingSupport()
   // agree. We need to update the configuration itself as well as the
   // cached value we have already initialized in the model state.
   if (max_batch_size == 0) {
-    const int new_max_batch_size = model_support_batching_ ? 1 : 0;
+    const int new_max_batch_size = model_support_batching_ ? 4 : 0;
 
     triton::common::TritonJson::Value mbs_value;
     model_state_->ModelConfig().Find("max_batch_size", &mbs_value);
@@ -1295,7 +1295,7 @@ AutoCompleteHelper::FixBatchingSupport()
     if (model_support_batching_ == 1) {
       LOG_MESSAGE(
           TRITONSERVER_LOG_WARN,
-          (std::string("autofilled max_batch_size to 1 for model '") +
+          (std::string("autofilled max_batch_size to 4 for model '") +
            model_state_->Name() +
            "' since batching is supporrted but no max_batch_size is specified "
            "in model configuration. Must specify max_batch_size to utilize "
