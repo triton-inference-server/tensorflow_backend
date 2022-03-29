@@ -1,4 +1,4 @@
-// Copyright 2020-2021, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright 2020-2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions
@@ -1248,8 +1248,13 @@ AutoCompleteHelper::FixBatchingSupport()
             std::string config_name;
             RETURN_IF_ERROR(config_io.MemberAsString("name", &config_name));
             triton::common::TritonJson::Value config_dims;
-            if (config_io.Find("dims", &config_dims) &&
-                (config_dims.ArraySize() != 0)) {
+            common::TritonJson::Value reshape;
+            if (config_io.Find("reshape", &reshape)) {
+              reshape.MemberAsArray("shape", &config_dims);
+            } else {
+              config_io.MemberAsArray("dims", &config_dims);
+            }
+            if (config_dims.ArraySize() != 0) {
               // look up corresponding io info from model
               for (const TRITONTF_IOList* itr = model_ios[ios_idx];
                    itr != nullptr; itr = itr->next_) {
