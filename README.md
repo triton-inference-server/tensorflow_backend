@@ -1,5 +1,5 @@
 <!--
-# Copyright 2020-2022, NVIDIA CORPORATION. All rights reserved.
+# Copyright 2020-2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -77,6 +77,15 @@ Currently you must use a version of TensorFlow from
 [NGC](https://ngc.nvidia.com). See [custom TensorFlow build
 instructions](#build-the-tensorflow-backend-with-custom-tensorflow)
 below.
+
+### How does the TensorFlow backend manage GPU memory?
+
+The TensorFlow backend does not "release" GPU memory until the Triton process
+exits. TensorFlow uses a pool allocator and so it retains any memory it
+allocates. It will reuse that memory if you load another TensorFlow model, but
+it will not return it to the system, even if it is no longer using it. For this
+reason, it is preferred to keep TensorFlow models grouped together on the same
+Triton process if you will be repeatedly loading/unloading them.
 
 ## Command-line Options
 
