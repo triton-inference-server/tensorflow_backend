@@ -82,10 +82,23 @@ below.
 
 The TensorFlow backend does not "release" GPU memory until the Triton process
 exits. TensorFlow uses a pool allocator and so it retains any memory it
-allocates. It will reuse that memory if you load another TensorFlow model, but
-it will not return it to the system, even if it is no longer using it. For this
-reason, it is preferred to keep TensorFlow models grouped together on the same
-Triton process if you will be repeatedly loading/unloading them.
+allocates until its own process exits. It will reuse that memory if you load
+another TensorFlow model, but it will not return it to the system, even if it
+is no longer using it. For this reason, it is preferred to keep TensorFlow
+models grouped together on the same Triton process if you will be repeatedly
+loading/unloading them.
+
+From the TensorFlow GPU docs:
+
+> [Memory is not released since it can lead to memory fragmentation](https://www.tensorflow.org/guide/gpu#limiting_gpu_memory_growth)
+
+To mitigate this issue, you can try using `gpu-memory-fraction` as described 
+[here](https://github.com/triton-inference-server/tensorflow_backend#--backend-configtensorflowgpu-memory-fractionfloat).
+This basically sets `per_process_gpu_memory_fraction` for TensorFlow which can
+restrict the memory consumption by TF models. Note when using this option,
+allow-growth is set false, hence running TF models might still fail if TF needs
+to allocate more memory for its executions. You can also use the [rate limiter](https://github.com/triton-inference-server/server/blob/main/docs/rate_limiter.md)
+in Triton to limit the number of requests allowed to enter.
 
 ## Command-line Options
 
