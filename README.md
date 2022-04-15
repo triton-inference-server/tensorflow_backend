@@ -92,20 +92,19 @@ From the TensorFlow GPU docs: "[Memory is not released since it can lead to memo
 
 #### Workarounds
 
-To limit the total amount of memory that TensorFlow allocates, you can use
-`gpu-memory-fraction` as described [here](https://github.com/triton-inference-server/tensorflow_backend#--backend-configtensorflowgpu-memory-fractionfloat).
+The following are a few available options to limit the total amount of memory
+that TensorFlow allocates:
+
+1. You can use `gpu-memory-fraction` as described 
+[here](https://github.com/triton-inference-server/tensorflow_backend#--backend-configtensorflowgpu-memory-fractionfloat).
 This restricts an upper-bound on the total memory TensorFlow can allocate for
 the process. However, note when using this option that allow-growth is set to
 false, hence running TF models might still fail if TF needs
 to allocate more memory for its executions than what's allowed. 
 
-To limit large growths in memory from concurrent TensorFlow executions,
+2. To limit large growths in memory from concurrent TensorFlow executions,
 you can also use the [rate limiter](https://github.com/triton-inference-server/server/blob/main/docs/rate_limiter.md)
-in Triton to limit the number of requests allowed to enter.
-
-These two features can help limit the amount of GPU memory required by 
-TensorFlow at any one time, and can improve re-use of the memory pool that
-TensorFlow allocates, depending on the use case.
+in Triton to limit the number of requests allowed to enter execution.
 
 ## Command-line Options
 
