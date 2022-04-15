@@ -1,5 +1,5 @@
 <!--
-# Copyright 2020-2022, NVIDIA CORPORATION. All rights reserved.
+# Copyright 2020-2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -77,6 +77,34 @@ Currently you must use a version of TensorFlow from
 [NGC](https://ngc.nvidia.com). See [custom TensorFlow build
 instructions](#build-the-tensorflow-backend-with-custom-tensorflow)
 below.
+
+### How does the TensorFlow backend manage GPU memory?
+
+The TensorFlow backend does not "release" GPU memory until the Triton process
+exits. TensorFlow uses a pool allocator and so it retains any memory it
+allocates until its own process exits. It will reuse that memory if you load
+another TensorFlow model, but it will not return it to the system, even if it
+is no longer using it. For this reason, it is preferred to keep TensorFlow
+models grouped together on the same Triton process if you will be repeatedly
+loading/unloading them.
+
+From the TensorFlow GPU docs: "[Memory is not released since it can lead to memory fragmentation](https://www.tensorflow.org/guide/gpu#limiting_gpu_memory_growth)".
+
+#### Workarounds
+
+The following are a few available options to limit the total amount of memory
+that TensorFlow allocates:
+
+1. You can use `gpu-memory-fraction` as described 
+[here](https://github.com/triton-inference-server/tensorflow_backend#--backend-configtensorflowgpu-memory-fractionfloat).
+This restricts an upper-bound on the total memory TensorFlow can allocate for
+the process. However, note when using this option that allow-growth is set to
+false, hence running TF models might still fail if TF needs
+to allocate more memory for its executions than what's allowed. 
+
+2. To limit large growths in memory from concurrent TensorFlow executions,
+you can also use the [rate limiter](https://github.com/triton-inference-server/server/blob/main/docs/rate_limiter.md)
+in Triton to limit the number of requests allowed to enter execution.
 
 ## Command-line Options
 
