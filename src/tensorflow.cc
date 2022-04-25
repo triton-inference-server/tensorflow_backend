@@ -1358,41 +1358,98 @@ AutoCompleteHelper::FixIOConfig(
     triton::common::TritonJson::Value dims(
         model_state_->ModelConfig(),
         triton::common::TritonJson::ValueType::ARRAY);
-    RETURN_ERROR_IF_TRUE(
-        io->shape_->rank_ == 0, TRITONSERVER_ERROR_INVALID_ARG,
-        std::string(
-            "unable to autofill for '" + model_state_->Name() +
-            "': the rank of model tensor '" + io->name_ +
-            "' is 0 which is not supported"));
-    // If the model supports batching and the max_batch_size
-    // is 0, then batching is turned off and the IO dimensions
-    // must be explicit.
-    const size_t start_index =
-        (model_support_batching_ && model_state_->MaxBatchSize() > 0) ? 1 : 0;
-    for (size_t i = start_index; i < io->shape_->rank_; ++i) {
-      RETURN_IF_ERROR(dims.AppendInt(io->shape_->dims_[i]));
-    }
 
-    // If io dims are empty then must use a reshape for the
-    // io, since 'dims' is not allowed to be empty.
-    if (dims.ArraySize() == 0) {
-      RETURN_IF_ERROR(dims.AppendInt(1));
-      triton::common::TritonJson::Value reshape(
+    // look at the loaded config, if there is one, for a hint about the
+    // rank of the model.
+    if (io->shape_->rank_ == 0 && found_ios) {
+      // If rank is 0 then we have to rely on the provided config to determine
+      // the dimensions of the inputs/outputs
+      size_t io_size = ios.ArraySize();
+      RETURN_ERROR_IF_TRUE(
+          io_size == 0, TRITONSERVER_ERROR_INVALID_ARG,
+          std::string(
+              "Unable to autofill for '" + model_state_->Name() +
+              "': the rank of model tensor '" + io->name_ +
+              "' is 0 and dimensions are not defined for all " + key));
+
+      triton::common::TritonJson::Value check_dims(
           model_state_->ModelConfig(),
           triton::common::TritonJson::ValueType::OBJECT);
-      triton::common::TritonJson::Value reshape_dims(
-          model_state_->ModelConfig(),
-          triton::common::TritonJson::ValueType::ARRAY);
-      RETURN_IF_ERROR(reshape.Add("shape", std::move(reshape_dims)));
-      RETURN_IF_ERROR(auto_complete_io.Add("reshape", std::move(reshape)));
+      for (size_t i = 0; i < io_size; ++i) {
+        triton::common::TritonJson::Value current_io_object(
+            model_state_->ModelConfig(),
+            triton::common::TritonJson::ValueType::OBJECT);
+        ios.IndexAsObject(i, &current_io_object);
+
+        bool found_dims = current_io_object.Find("dims", &check_dims);
+        RETURN_ERROR_IF_TRUE(
+            !found_dims, TRITONSERVER_ERROR_INVALID_ARG,
+            std::string(
+                "Unable to autofill for '" + model_state_->Name() +
+                "': the rank of model tensor '" + io->name_ +
+                "' is 0 and dimensions are not defined for all " + key));
+      }
+    } else if (io->shape_->rank_ > 0 && !found_ios) {
+      // The model signature supports batching then the first
+      // dimension is -1 and should not appear in the model
+      // configuration 'dims' that we are creating.
+      for (size_t i = (model_support_batching_ ? 1 : 0); i < io->shape_->rank_;
+           ++i) {
+        RETURN_IF_ERROR(dims.AppendInt(io->shape_->dims_[i]));
+      }
+
+      // If io dims are empty then must use a reshape for the
+      // io, since 'dims' is not allowed to be empty.
+      if (dims.ArraySize() == 0) {
+        RETURN_IF_ERROR(dims.AppendInt(1));
+        triton::common::TritonJson::Value reshape(
+            model_state_->ModelConfig(),
+            triton::common::TritonJson::ValueType::OBJECT);
+        triton::common::TritonJson::Value reshape_dims(
+            model_state_->ModelConfig(),
+            triton::common::TritonJson::ValueType::ARRAY);
+        RETURN_IF_ERROR(reshape.Add("shape", std::move(reshape_dims)));
+        RETURN_IF_ERROR(auto_complete_io.Add("reshape", std::move(reshape)));
+      }
+      RETURN_IF_ERROR(auto_complete_io.Add("dims", std::move(dims)));
+      RETURN_IF_ERROR(auto_complete_ios.Append(std::move(auto_complete_io)));
+
+      model_state_->ModelConfig().Add(key, std::move(auto_complete_ios));
+    } else if (io->shape_->rank_ > 0 && found_ios) {
+      // The number of elements in dims should match 'rank - 1'
+      // when the model supports batching; otherwise, number of
+      // elements in dims should match 'rank'. This does not
+      // try to overwrite the user provided configuration, throws
+      // error instead.
+      if (model_support_batching_) {
+        RETURN_ERROR_IF_TRUE(
+            dims.ArraySize() != (io->shape_->rank_ - 1),
+            TRITONSERVER_ERROR_INVALID_ARG,
+            std::string(
+                "Number of dimensions (" + std::to_string(dims.ArraySize()) +
+                ") given for '" + model_state_->Name() +
+                "' in configuration does not match the rank (" +
+                std::to_string(io->shape_->rank_ - 1) +
+                ")of the loaded model."));
+      } else {
+        RETURN_ERROR_IF_TRUE(
+            dims.ArraySize() != io->shape_->rank_,
+            TRITONSERVER_ERROR_INVALID_ARG,
+            std::string(
+                "Number of dimensions (" + std::to_string(dims.ArraySize()) +
+                ") given for '" + model_state_->Name() +
+                "' in configuration does not match the rank (" +
+                std::to_string(io->shape_->rank_) + ") of the loaded model."));
+      }
+
+    } else {
+      RETURN_ERROR_IF_TRUE(
+          io->shape_->rank_ == 0, TRITONSERVER_ERROR_INVALID_ARG,
+          std::string(
+              "Unable to autofill for '" + model_state_->Name() +
+              "': the rank of model tensor '" + io->name_ +
+              "' is 0 which is not supported"));
     }
-    RETURN_IF_ERROR(auto_complete_io.Add("dims", std::move(dims)));
-    RETURN_IF_ERROR(auto_complete_ios.Append(std::move(auto_complete_io)));
-  }
-  if (found_ios) {
-    ios.Swap(auto_complete_ios);
-  } else {
-    model_state_->ModelConfig().Add(key, std::move(auto_complete_ios));
   }
 
   return nullptr;  // success
