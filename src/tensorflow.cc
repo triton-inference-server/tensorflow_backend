@@ -1421,27 +1421,40 @@ AutoCompleteHelper::FixIOConfig(
       // elements in dims should match 'rank'. This does not
       // try to overwrite the user provided configuration, throws
       // error instead.
-      if (model_support_batching_) {
-        RETURN_ERROR_IF_TRUE(
-            dims.ArraySize() != (io->shape_->rank_ - 1),
-            TRITONSERVER_ERROR_INVALID_ARG,
-            std::string(
-                "Number of dimensions (" + std::to_string(dims.ArraySize()) +
-                ") given for '" + model_state_->Name() +
-                "' in configuration does not match the rank (" +
-                std::to_string(io->shape_->rank_ - 1) +
-                ")of the loaded model."));
-      } else {
-        RETURN_ERROR_IF_TRUE(
-            dims.ArraySize() != io->shape_->rank_,
-            TRITONSERVER_ERROR_INVALID_ARG,
-            std::string(
-                "Number of dimensions (" + std::to_string(dims.ArraySize()) +
-                ") given for '" + model_state_->Name() +
-                "' in configuration does not match the rank (" +
-                std::to_string(io->shape_->rank_) + ") of the loaded model."));
-      }
+      size_t io_size = ios.ArraySize();
+      for (size_t i = 0; i < io_size; ++i) {
+        triton::common::TritonJson::Value current_io_object(
+            model_state_->ModelConfig(),
+            triton::common::TritonJson::ValueType::OBJECT);
+        ios.IndexAsObject(i, &current_io_object);
 
+        triton::common::TritonJson::Value current_dims(
+            model_state_->ModelConfig(),
+            triton::common::TritonJson::ValueType::ARRAY);
+        current_io_object.Find("dims", &current_dims);
+
+        if (model_support_batching_) {
+          RETURN_ERROR_IF_TRUE(
+              current_dims.ArraySize() != (io->shape_->rank_ - 1),
+              TRITONSERVER_ERROR_INVALID_ARG,
+              std::string(
+                  "Number of dimensions (" + std::to_string(dims.ArraySize()) +
+                  ") given for '" + model_state_->Name() +
+                  "' in configuration does not match the rank (" +
+                  std::to_string(io->shape_->rank_ - 1) +
+                  ")of the loaded model."));
+        } else {
+          RETURN_ERROR_IF_TRUE(
+              current_dims.ArraySize() != io->shape_->rank_,
+              TRITONSERVER_ERROR_INVALID_ARG,
+              std::string(
+                  "Number of dimensions (" + std::to_string(dims.ArraySize()) +
+                  ") given for '" + model_state_->Name() +
+                  "' in configuration does not match the rank (" +
+                  std::to_string(io->shape_->rank_) +
+                  ") of the loaded model."));
+        }
+      }
     } else {
       RETURN_ERROR_IF_TRUE(
           io->shape_->rank_ == 0, TRITONSERVER_ERROR_INVALID_ARG,
