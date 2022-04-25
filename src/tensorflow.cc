@@ -1391,12 +1391,7 @@ AutoCompleteHelper::FixIOConfig(
       RETURN_IF_ERROR(auto_complete_io.Add("dims", std::move(dims)));
       RETURN_IF_ERROR(auto_complete_ios.Append(std::move(auto_complete_io)));
 
-      if (found_ios) {
-        ios.Swap(auto_complete_ios);
-      } else {
-        model_state_->ModelConfig().Add(key, std::move(auto_complete_ios));
-      }
-
+      model_state_->ModelConfig().Add(key, std::move(auto_complete_ios));
     } else if (io->shape_->rank_ > 0 && found_ios) {
       // The number of elements in dims should match 'rank - 1'
       // when the model supports batching; otherwise, number of
