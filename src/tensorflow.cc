@@ -1398,6 +1398,9 @@ AutoCompleteHelper::FixIOConfig(
       // elements in dims should match 'rank'. This does not
       // try to overwrite the user provided configuration, throws
       // error instead.
+      // However, ragged batching is an exception to this rule. A
+      // tensor allowing ragged batch should not match with
+      // 'rank - 1'.
       size_t io_size = ios.ArraySize();
       for (size_t i = 0; i < io_size; ++i) {
         triton::common::TritonJson::Value current_io_object(
@@ -1405,31 +1408,46 @@ AutoCompleteHelper::FixIOConfig(
             triton::common::TritonJson::ValueType::OBJECT);
         ios.IndexAsObject(i, &current_io_object);
 
-        triton::common::TritonJson::Value current_dims(
-            model_state_->ModelConfig(),
-            triton::common::TritonJson::ValueType::ARRAY);
-        current_io_object.Find("dims", &current_dims);
+        triton::common::TritonJson::Value allow_ragged_batch_json;
+        bool allow_ragged_batch = false;
+        if (current_io_object.Find(
+                "allow_ragged_batch", &allow_ragged_batch_json)) {
+          allow_ragged_batch_json.AsBool(&allow_ragged_batch);
+        }
+        if (!allow_ragged_batch) {
+          triton::common::TritonJson::Value current_dims(
+              model_state_->ModelConfig(),
+              triton::common::TritonJson::ValueType::ARRAY);
+          current_io_object.Find("dims", &current_dims);
 
-        if (model_support_batching_) {
-          RETURN_ERROR_IF_TRUE(
-              current_dims.ArraySize() != (io->shape_->rank_ - 1),
-              TRITONSERVER_ERROR_INVALID_ARG,
-              std::string(
-                  "Number of dimensions (" + std::to_string(dims.ArraySize()) +
-                  ") given for '" + model_state_->Name() +
-                  "' in configuration does not match the rank (" +
-                  std::to_string(io->shape_->rank_ - 1) +
-                  ")of the loaded model."));
-        } else {
-          RETURN_ERROR_IF_TRUE(
-              current_dims.ArraySize() != io->shape_->rank_,
-              TRITONSERVER_ERROR_INVALID_ARG,
-              std::string(
-                  "Number of dimensions (" + std::to_string(dims.ArraySize()) +
-                  ") given for '" + model_state_->Name() +
-                  "' in configuration does not match the rank (" +
-                  std::to_string(io->shape_->rank_) +
-                  ") of the loaded model."));
+          triton::common::TritonJson::Value current_io_object(
+              model_state_->ModelConfig(),
+              triton::common::TritonJson::ValueType::OBJECT);
+
+          if (model_support_batching_) {
+            RETURN_ERROR_IF_TRUE(
+                current_dims.ArraySize() != (io->shape_->rank_ - 1),
+                TRITONSERVER_ERROR_INVALID_ARG,
+                std::string(
+                    "Number of dimensions (" +
+                    std::to_string(current_dims.ArraySize()) +
+                    ") given for tensor " + io->name_ + " for model '" +
+                    model_state_->Name() +
+                    "' in configuration does not match the rank (" +
+                    std::to_string(io->shape_->rank_ - 1) +
+                    ") of the loaded model."));
+          } else {
+            RETURN_ERROR_IF_TRUE(
+                current_dims.ArraySize() != io->shape_->rank_,
+                TRITONSERVER_ERROR_INVALID_ARG,
+                std::string(
+                    "Number of dimensions (" +
+                    std::to_string(dims.ArraySize()) + ") given for tensor " +
+                    io->name_ + " for model '" + model_state_->Name() +
+                    "' in configuration does not match the rank (" +
+                    std::to_string(io->shape_->rank_) +
+                    ") of the loaded model."));
+          }
         }
       }
     } else {
