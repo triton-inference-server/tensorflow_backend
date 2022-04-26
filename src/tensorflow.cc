@@ -1150,7 +1150,8 @@ class AutoCompleteHelper {
  public:
   AutoCompleteHelper(ModelState* model_state, TRITONTF_Model* tritontf_model)
       : model_state_(model_state),
-        tritontf_model_(tritontf_model, TRITONTF_ModelDelete)
+        tritontf_model_(tritontf_model, TRITONTF_ModelDelete),
+        using_ragged_batching_(false)
   {
   }
 
@@ -1166,6 +1167,7 @@ class AutoCompleteHelper {
   std::unique_ptr<TRITONTF_Model, decltype(&TRITONTF_ModelDelete)>
       tritontf_model_;
   bool model_support_batching_;
+  bool using_ragged_batching_;
 };
 
 TRITONSERVER_Error*
@@ -1226,7 +1228,7 @@ AutoCompleteHelper::FixBatchingSupport()
   // from existing config is also ambiguous, it can be either unspecified or
   // no-batch, autofill will check specified input/output (if any) for hint.
   model_support_batching_ = sig_supports_batch;
-  if (model_support_batching_ && (max_batch_size == 0)) {
+  if (model_support_batching_) {
     bool config_batch_hint = false;
     triton::common::TritonJson::Value config_inputs(
         model_state_->ModelConfig(),
@@ -1240,42 +1242,61 @@ AutoCompleteHelper::FixBatchingSupport()
       std::vector<triton::common::TritonJson::Value*> config_ios{
           &config_inputs, &config_outputs};
       for (size_t ios_idx = 0; ios_idx < config_ios.size(); ios_idx++) {
-        for (size_t i = 0; i < config_ios[ios_idx]->ArraySize(); i++) {
+        for (size_t i = 0; (i < config_ios[ios_idx]->ArraySize()) &&
+                           (!using_ragged_batching_);
+             i++) {
           triton::common::TritonJson::Value config_io;
           RETURN_IF_ERROR(config_ios[ios_idx]->IndexAsObject(i, &config_io));
-          if (config_io.Find("name")) {
-            std::string config_name;
-            RETURN_IF_ERROR(config_io.MemberAsString("name", &config_name));
-            triton::common::TritonJson::Value config_dims;
-            common::TritonJson::Value reshape;
-            if (config_io.Find("reshape", &reshape)) {
-              reshape.MemberAsArray("shape", &config_dims);
-            } else {
-              config_io.MemberAsArray("dims", &config_dims);
-            }
-            if (config_dims.ArraySize() != 0) {
-              // look up corresponding io info from model
-              for (const TRITONTF_IOList* itr = model_ios[ios_idx];
-                   itr != nullptr; itr = itr->next_) {
-                TRITONTF_IO* io = itr->io_;
-                if (config_name == io->name_) {
-                  bool should_batch =
-                      (io->shape_->rank_ == (config_dims.ArraySize() + 1));
-                  // inconsistent hint
-                  if (config_batch_hint &&
-                      (model_support_batching_ != should_batch)) {
-                    return TRITONSERVER_ErrorNew(
-                        TRITONSERVER_ERROR_INTERNAL,
-                        std::string(
-                            "unable to autofill for '" + model_state_->Name() +
-                            "', model tensor configurations are "
-                            "contradicting " +
-                            "each other in terms of whether batching is "
-                            "supported")
-                            .c_str());
+          triton::common::TritonJson::Value allow_ragged_batch_json;
+
+          bool allow_ragged_batch = false;
+          if (config_io.Find("allow_ragged_batch", &allow_ragged_batch_json)) {
+            allow_ragged_batch_json.AsBool(&allow_ragged_batch);
+          }
+          if (allow_ragged_batch) {
+            // Treat the presence of tensor allowing ragged batch as
+            // a strong hint for batching.
+            // Must skip all the dimension checks for rest tensors as
+            // the model tensor rank will not be `config rank + 1`.
+            using_ragged_batching_ = allow_ragged_batch;
+            config_batch_hint = true;
+            model_support_batching_ = true;
+          } else {
+            if (config_io.Find("name")) {
+              std::string config_name;
+              RETURN_IF_ERROR(config_io.MemberAsString("name", &config_name));
+              triton::common::TritonJson::Value config_dims;
+              common::TritonJson::Value reshape;
+              if (config_io.Find("reshape", &reshape)) {
+                reshape.MemberAsArray("shape", &config_dims);
+              } else {
+                config_io.MemberAsArray("dims", &config_dims);
+              }
+              if (config_dims.ArraySize() != 0) {
+                // look up corresponding io info from model
+                for (const TRITONTF_IOList* itr = model_ios[ios_idx];
+                     itr != nullptr; itr = itr->next_) {
+                  TRITONTF_IO* io = itr->io_;
+                  if (config_name == io->name_) {
+                    bool should_batch =
+                        (io->shape_->rank_ == (config_dims.ArraySize() + 1));
+                    // inconsistent hint
+                    if (config_batch_hint &&
+                        (model_support_batching_ != should_batch)) {
+                      return TRITONSERVER_ErrorNew(
+                          TRITONSERVER_ERROR_INTERNAL,
+                          std::string(
+                              "unable to autofill for '" +
+                              model_state_->Name() +
+                              "', model tensor configurations are "
+                              "contradicting " +
+                              "each other in terms of whether batching is "
+                              "supported")
+                              .c_str());
+                    }
+                    config_batch_hint = true;
+                    model_support_batching_ = should_batch;
                   }
-                  config_batch_hint = true;
-                  model_support_batching_ = should_batch;
                 }
               }
             }
@@ -1408,13 +1429,7 @@ AutoCompleteHelper::FixIOConfig(
             triton::common::TritonJson::ValueType::OBJECT);
         ios.IndexAsObject(i, &current_io_object);
 
-        triton::common::TritonJson::Value allow_ragged_batch_json;
-        bool allow_ragged_batch = false;
-        if (current_io_object.Find(
-                "allow_ragged_batch", &allow_ragged_batch_json)) {
-          allow_ragged_batch_json.AsBool(&allow_ragged_batch);
-        }
-        if (!allow_ragged_batch) {
+        if (!using_ragged_batching_) {
           triton::common::TritonJson::Value current_dims(
               model_state_->ModelConfig(),
               triton::common::TritonJson::ValueType::ARRAY);
