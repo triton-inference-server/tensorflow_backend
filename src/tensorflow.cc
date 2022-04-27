@@ -1435,10 +1435,6 @@ AutoCompleteHelper::FixIOConfig(
               triton::common::TritonJson::ValueType::ARRAY);
           current_io_object.Find("dims", &current_dims);
 
-          triton::common::TritonJson::Value current_io_object(
-              model_state_->ModelConfig(),
-              triton::common::TritonJson::ValueType::OBJECT);
-
           if (model_support_batching_) {
             RETURN_ERROR_IF_TRUE(
                 current_dims.ArraySize() != (io->shape_->rank_ - 1),
