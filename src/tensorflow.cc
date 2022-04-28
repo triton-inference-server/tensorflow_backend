@@ -2113,8 +2113,8 @@ ModelInstanceState::ProcessRequests(
              ((TRITONTF_TensorIsGPUTensor(output_tensor)) ? "true" : "false"))
                 .c_str());
 
-        output_tensor_itr = output_tensor_itr->next_;
       }
+      output_tensor_itr = output_tensor_itr->next_;
     }
 
     // Finalize and wait for any pending buffer copies.
