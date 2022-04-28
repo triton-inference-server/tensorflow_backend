@@ -2023,6 +2023,9 @@ ModelInstanceState::ProcessRequests(
     for (const auto& name : model_output_names) {
       TRITONTF_Tensor* output_tensor = output_tensor_itr->tensor_;
 
+      // For certain input data, the model can return an empty tensor
+      // as output. Make sure the output is available before trying
+      // to copy it out.
       if (TRITONTF_TensorData(output_tensor) != nullptr) {
         const BatchOutput* batch_output =
             StateForModel()->FindBatchOutput(name);
