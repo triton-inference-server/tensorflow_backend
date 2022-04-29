@@ -2024,13 +2024,25 @@ ModelInstanceState::ProcessRequests(
     for (const auto& name : model_output_names) {
       TRITONTF_Tensor* output_tensor = output_tensor_itr->tensor_;
 
+      TRITONTF_DataType tf_datatype = TRITONTF_TensorDataType(output_tensor);
+      TRITONTF_Shape* tf_shape = TRITONTF_TensorShape(output_tensor);
+
+      const TRITONSERVER_DataType datatype = ConvertDataType(tf_datatype);
+
+      // For certain input data, sometimes a model can return an empty
+      // tensor as output. If so, then we must attach an empty output
+      // to the response.
+      if (TRITONTF_TensorData(output_tensor) == nullptr) {
+        std::vector<int64_t> empty_shape{0};
+        responder.ProcessTensor(
+              name, datatype, empty_shape, nullptr,
+              (TRITONTF_TensorIsGPUTensor(output_tensor))
+                  ? TRITONSERVER_MEMORY_GPU
+                  : TRITONSERVER_MEMORY_CPU,
+              (TRITONTF_TensorIsGPUTensor(output_tensor)) ? DeviceId() : 0);
+      } else { // TRITONTF_TensorData(output_tensor) != nullptr
       const BatchOutput* batch_output = StateForModel()->FindBatchOutput(name);
       if (batch_output == nullptr) {
-        TRITONTF_DataType tf_datatype = TRITONTF_TensorDataType(output_tensor);
-        TRITONTF_Shape* tf_shape = TRITONTF_TensorShape(output_tensor);
-
-        const TRITONSERVER_DataType datatype = ConvertDataType(tf_datatype);
-
         // batchn_shape holds the shape of the entire tensor batch, but
         // is overwritten below and used as the shape for each response
         // output.
@@ -2097,15 +2109,14 @@ ModelInstanceState::ProcessRequests(
                 : TRITONSERVER_MEMORY_CPU,
             (TRITONTF_TensorIsGPUTensor(output_tensor)) ? DeviceId() : 0);
       }
-
-      LOG_MESSAGE(
+    }
+    LOG_MESSAGE(
           TRITONSERVER_LOG_VERBOSE,
           (std::string("TRITONBACKEND_ModelExecute: output '") + name +
            "' is GPU tensor: " +
            ((TRITONTF_TensorIsGPUTensor(output_tensor)) ? "true" : "false"))
               .c_str());
-
-      output_tensor_itr = output_tensor_itr->next_;
+    output_tensor_itr = output_tensor_itr->next_;
     }
 
     // Finalize and wait for any pending buffer copies.
