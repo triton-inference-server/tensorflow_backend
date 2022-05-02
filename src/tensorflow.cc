@@ -2031,10 +2031,10 @@ ModelInstanceState::ProcessRequests(
       // For certain input data, sometimes a model can return an empty
       // tensor as output. If so, then we must attach an empty output
       // to the response.
-      if (TRITONTF_TensorData(output_tensor) == nullptr) {
+      if (TRITONTF_TensorDataByteSize(output_tensor) == 0) {
         std::vector<int64_t> empty_shape{0};
         responder.ProcessTensor(
-            name, datatype, empty_shape, nullptr,
+            name, datatype, empty_shape, TRITONTF_TensorData(output_tensor),
             (TRITONTF_TensorIsGPUTensor(output_tensor))
                 ? TRITONSERVER_MEMORY_GPU
                 : TRITONSERVER_MEMORY_CPU,
