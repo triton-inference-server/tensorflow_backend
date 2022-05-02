@@ -60,6 +60,9 @@ std::string ShapeToString(
 /// data-type.
 bool CompareDataType(TRITONTF_DataType model_dtype, const std::string& dtype);
 
+/// \return true if a model configuration data-type is invalid
+bool DataTypeIsInvalid(const std::string& dtype);
+
 /// \return the TRITONSERVER data-type that corresponds to a
 /// TRITONTF data-type.
 TRITONSERVER_DataType ConvertDataType(TRITONTF_DataType dtype);

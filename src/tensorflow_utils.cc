@@ -145,6 +145,13 @@ CompareDataType(TRITONTF_DataType model_dtype, const std::string& dtype)
   return model_dtype == cdtype;
 }
 
+bool
+DataTypeIsInvalid(const std::string& dtype)
+{
+  auto cdtype = ConvertDataType(dtype);
+  return cdtype == TRITONTF_TYPE_INVALID;
+}
+
 TRITONSERVER_DataType
 ConvertDataType(TRITONTF_DataType dtype)
 {
