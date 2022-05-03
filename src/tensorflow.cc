@@ -1469,6 +1469,39 @@ AutoCompleteHelper::FillMissingValues(
     RETURN_IF_ERROR(config.Add("dims", std::move(dims)));
   }
 
+  // Elements in dims should match 'rank'. However, ragged batching is an
+  // exception to this rule. A tensor allowing ragged batch should not match
+  // with 'rank - 1'.
+  if (!using_ragged_batching_) {
+    triton::common::TritonJson::Value current_dims(
+        model_state_->ModelConfig(),
+        triton::common::TritonJson::ValueType::ARRAY);
+    config.Find("dims", &current_dims);
+
+    if (model_support_batching_) {
+      RETURN_ERROR_IF_TRUE(
+          current_dims.ArraySize() != (io->shape_->rank_ - 1),
+          TRITONSERVER_ERROR_INVALID_ARG,
+          std::string(
+              "Number of dimensions (" +
+              std::to_string(current_dims.ArraySize()) + ") given for tensor " +
+              io->name_ + " for model '" + model_state_->Name() +
+              "' in configuration does not match the rank (" +
+              std::to_string(io->shape_->rank_ - 1) +
+              ") of the loaded model."));
+    } else {
+      RETURN_ERROR_IF_TRUE(
+          current_dims.ArraySize() != io->shape_->rank_,
+          TRITONSERVER_ERROR_INVALID_ARG,
+          std::string(
+              "Number of dimensions (" +
+              std::to_string(current_dims.ArraySize()) + ") given for tensor " +
+              io->name_ + " for model '" + model_state_->Name() +
+              "' in configuration does not match the rank (" +
+              std::to_string(io->shape_->rank_) + ") of the loaded model."));
+    }
+  }
+
   return nullptr;  // Success
 }
 
@@ -1512,8 +1545,6 @@ AutoCompleteHelper::FixIOConfigInputs(const TRITONTF_IOList* reference_list)
   //   then we try to autocomplete it.
   // - If there is an input in the config.pbtxt
   //   which is not in the model then we throw an error.
-  // Iterate through the user provided ios since we expect this to be
-  // well defined.
   std::vector<const TRITONTF_IOList*> reference_list_copy =
       CopyList(reference_list);
   RETURN_ERROR_IF_TRUE(
@@ -1544,10 +1575,7 @@ AutoCompleteHelper::FixIOConfigInputs(const TRITONTF_IOList* reference_list)
          std::string("' but none found in loaded model '") +
          model_state_->Name() + std::string("'.")));
 
-    TRITONSERVER_Error* err = FillMissingValues(io, current_io);
-    if (err) {
-      return err;
-    }
+    RETURN_IF_ERROR(FillMissingValues(io, current_io));
 
     RemoveFromListByName(io->name_, reference_list_copy);
   }
@@ -1560,10 +1588,7 @@ AutoCompleteHelper::FixIOConfigInputs(const TRITONTF_IOList* reference_list)
         model_state_->ModelConfig(),
         triton::common::TritonJson::ValueType::OBJECT);
 
-    TRITONSERVER_Error* err = FillMissingValues(io, blank_value);
-    if (err) {
-      return err;
-    }
+    RETURN_IF_ERROR(FillMissingValues(io, blank_value));
 
     ios.Append(std::move(blank_value));
   }
@@ -1578,8 +1603,8 @@ AutoCompleteHelper::FixIOConfigOutputs(const TRITONTF_IOList* reference_list)
   triton::common::TritonJson::Value ios;
   bool found_ios = model_state_->ModelConfig().Find("output", &ios);
 
-  // If output is empty or undefined then we want to autocomplete this otherwise
-  // we only want to check the defined outputs
+  // If output is empty or undefined then autocomplete this otherwise
+  // only check the defined outputs
   bool should_auto_complete_output = (!found_ios || ios.ArraySize() == 0);
   if (should_auto_complete_output) {
     triton::common::TritonJson::Value auto_complete_ios(
