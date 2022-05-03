@@ -118,6 +118,19 @@ FindIOByName(const TRITONTF_IOList* ios, const std::string& name)
   return nullptr;
 }
 
+const TRITONTF_IO*
+FindIOByName(
+    const std::vector<const TRITONTF_IOList*> ios, std::string& name)
+{
+  for (const auto itr : ios) {
+    if (itr->io_->name_ == name) {
+      return itr->io_;
+    }
+  }
+
+  return nullptr;
+}
+
 std::string
 ShapeToString(const TRITONTF_Shape* shape, const size_t start_idx)
 {

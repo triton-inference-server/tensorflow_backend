@@ -49,6 +49,10 @@ TRITONSERVER_Error* CompareDims(
 const TRITONTF_IO* FindIOByName(
     const TRITONTF_IOList* ios, const std::string& name);
 
+/// \return a named input/output tensor. Return nullptr if not found.
+const TRITONTF_IO* FindIOByName(
+    const std::vector<const TRITONTF_IOList*> ios, std::string& name);
+
 // Convert a vector representing a shape to string representation.
 /// \param dims The vector of dimensions to be converted.
 /// \return String representation of the vector in pattern
