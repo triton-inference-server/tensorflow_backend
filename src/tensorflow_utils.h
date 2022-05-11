@@ -31,6 +31,9 @@
 
 namespace triton { namespace backend { namespace tensorflow {
 
+/// \return True if the provided model I/Os allow batching support; False otherwise
+bool ModelSupportsBatch(std::vector<const TRITONTF_IOList*> model_ios);
+
 /// \return nullptr if a TensorFlow shape can support a model
 /// configuration shape. Dimensions with variable size in the
 /// TensorFlow shape can support any size in the corresponding model

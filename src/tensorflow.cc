@@ -1158,6 +1158,7 @@ class AutoCompleteHelper {
   TRITONSERVER_Error* Fix();
 
  private:
+  TRITONSERVER_Error* FixBatchingSupport_();
   TRITONSERVER_Error* FixBatchingSupport();
 <<<<<<< HEAD
   TRITONSERVER_Error* FixConfigInputs(const TRITONTF_IOList* reference_list);
@@ -1206,7 +1207,8 @@ AutoCompleteHelper::Fix()
 {
   // Validate and fill 'max_batch_size' based on model signature and
   // config hint
-  RETURN_IF_ERROR(FixBatchingSupport());
+  // RETURN_IF_ERROR(FixBatchingSupport());
+  RETURN_IF_ERROR(FixBatchingSupport_());
 
   // Inputs
   const TRITONTF_IOList* inputs = TRITONTF_ModelInputs(tritontf_model_.get());
@@ -1225,6 +1227,162 @@ AutoCompleteHelper::Fix()
 >>>>>>> messy debug code
 
   return nullptr;  // success
+}
+
+TRITONSERVER_Error*
+AutoCompleteHelper::FixBatchingSupport_()
+{
+  // Assumption here is that we will enable batching if possible. If the user 
+  // has provided max-batch-size=0 in their config file and we detect batching 
+  // support in the model, then we will turn on batching because we don't know
+  // whether the user provided the 0 or if the field was omitted.
+  //  
+  // 1. user provides max-batch-size > 0
+  //    a. for each I/O
+  //       1. if I/O dims and/or shape are defined then assume this is correct
+  //          a. if loaded model I/O has shape > 0 then throw error saying
+  //             we found batching defined by the user but model doesn't support batching.
+  //       2. if not defined then check the loaded model 
+  //          a. if shape is empty, continue
+  //          b. if shape is -1, continue
+  //          c. if shape is > 0, throw error saying we found the model doesn't support batching.
+  // 2. max-batch-size = 0
+  //    a. for each I/O
+  //       1. if I/O dims and/or shape are defined then assume this is correct and continue
+  //       2. if not defined then check the loaded model 
+  //          a. if shape is empty, continue
+  //          b. if shape is -1, continue
+  //          c. if shape is > 0, batching is not supported and continue
+  // 
+
+  std::vector<const TRITONTF_IOList*> model_ios{
+    TRITONTF_ModelInputs(tritontf_model_.get()),
+    TRITONTF_ModelOutputs(tritontf_model_.get())};
+
+  bool sig_supports_batch = ModelSupportsBatch(model_ios);
+  const int max_batch_size = model_state_->MaxBatchSize();
+
+  // If max-batch-size is explicitly set to non-zero but the model
+  // signature doesn't support batching then can't autofill.
+  if (!sig_supports_batch && (max_batch_size > 0)) {
+    return TRITONSERVER_ErrorNew(
+        TRITONSERVER_ERROR_INTERNAL,
+        std::string(
+            "unable to autofill for '" + model_state_->Name() +
+            "', configuration specified max-batch " +
+            std::to_string(max_batch_size) +
+            " but model signature does not support batching")
+            .c_str());
+  }
+
+  bool config_batch_hint = false;
+  if (sig_supports_batch) {
+    // Checked for early out already so model 
+    // may be able to batch. Need to check 
+    // to make sure the ambiguous I/Os are defined by the
+    // user. If so, then we assume the model can batch. 
+    // If not, then we have an empty shape which we cannot 
+    // determine if we can batch or not and turn off batching.
+    
+    config_batch_hint = true;
+    triton::common::TritonJson::Value config_inputs(
+        model_state_->ModelConfig(),
+        triton::common::TritonJson::ValueType::ARRAY);
+    model_state_->ModelConfig().Find("input", &config_inputs);
+    triton::common::TritonJson::Value config_outputs(
+        model_state_->ModelConfig(),
+        triton::common::TritonJson::ValueType::ARRAY);
+    model_state_->ModelConfig().Find("output", &config_outputs);
+    if ((config_inputs.ArraySize() != 0) || (config_outputs.ArraySize() != 0)) {
+      std::vector<triton::common::TritonJson::Value*> config_ios{
+          &config_inputs, &config_outputs};
+      for (size_t ios_idx = 0; ios_idx < config_ios.size(); ios_idx++) {
+        for (size_t i = 0; (i < config_ios[ios_idx]->ArraySize()) &&
+                            (!using_ragged_batching_);
+              i++) {
+
+          triton::common::TritonJson::Value config_io;
+          RETURN_IF_ERROR(config_ios[ios_idx]->IndexAsObject(i, &config_io));
+          triton::common::TritonJson::Value allow_ragged_batch_json;
+
+          bool allow_ragged_batch = false;
+          if (config_io.Find("allow_ragged_batch", &allow_ragged_batch_json)) {
+            allow_ragged_batch_json.AsBool(&allow_ragged_batch);
+          }
+          if (allow_ragged_batch) {
+            // Treat the presence of tensor allowing ragged batch as
+            // a strong hint for batching.
+            // Must skip all the dimension checks for rest tensors as
+            // the model tensor rank will not be `config rank + 1`.
+            using_ragged_batching_ = allow_ragged_batch;
+          } else {
+            if (config_io.Find("name")) {
+              std::string config_name;
+              RETURN_IF_ERROR(config_io.MemberAsString("name", &config_name));
+              triton::common::TritonJson::Value config_dims;
+              common::TritonJson::Value reshape;
+              if (config_io.Find("reshape", &reshape)) {
+                reshape.MemberAsArray("shape", &config_dims);
+              } else {
+                config_io.MemberAsArray("dims", &config_dims);
+              }
+              for (const TRITONTF_IOList* itr = model_ios[ios_idx];
+                    itr != nullptr; itr = itr->next_) {
+                TRITONTF_IO* io = itr->io_;
+                if (config_name == io->name_) {
+                  bool model_io_explicit = io->shape_->rank_ > 0;
+                  if (!model_io_explicit && config_dims.ArraySize() == 0) {
+                    // don't have enough information to batch
+                    config_batch_hint = false;
+                  } else if (model_io_explicit && io->shape_->rank_ != config_dims.ArraySize() + 1) {
+                    // inconsistent user provided input
+                    return TRITONSERVER_ErrorNew(
+                      TRITONSERVER_ERROR_INTERNAL,
+                      std::string(
+                          "unable to autofill for '" +
+                          model_state_->Name() +
+                          "', model tensor configurations are "
+                          "contradicting " +
+                          "each other in terms of whether batching is "
+                          "supported")
+                          .c_str());
+                  }
+                  break;                  
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  model_support_batching_ = config_batch_hint;
+    
+  // Set max-batch-size to 1 if the model signature and config hint
+  // agree. We need to update the configuration itself as well as the
+  // cached value we have already initialized in the model state.
+  if (max_batch_size == 0) {
+    const int new_max_batch_size = model_support_batching_ ? 1 : 0;
+
+    triton::common::TritonJson::Value mbs_value;
+    model_state_->ModelConfig().Find("max_batch_size", &mbs_value);
+    mbs_value.SetInt(new_max_batch_size);
+
+    model_state_->SetMaxBatchSize(new_max_batch_size);
+    if (model_support_batching_ == 1) {
+      LOG_MESSAGE(
+          TRITONSERVER_LOG_WARN,
+          (std::string("autofilled max_batch_size to 1 for model '") +
+           model_state_->Name() +
+           "' since batching is supporrted but no max_batch_size is specified "
+           "in model configuration. Must specify max_batch_size to utilize "
+           "autofill with a larger max batch size")
+              .c_str());
+    }
+  }
+
+  
+  return nullptr;      // Success
 }
 
 TRITONSERVER_Error*
@@ -1311,12 +1469,12 @@ AutoCompleteHelper::FixBatchingSupport()
               } else {
                 config_io.MemberAsArray("dims", &config_dims);
               }
-              if (config_dims.ArraySize() != 0) {
+              if (config_dims.ArraySize() != 0) { 
                 // look up corresponding io info from model
                 for (const TRITONTF_IOList* itr = model_ios[ios_idx];
                      itr != nullptr; itr = itr->next_) {
                   TRITONTF_IO* io = itr->io_;
-                  if (config_name == io->name_) {
+                  if (config_name == io->name_) {                                       
                     bool should_batch =
                         (io->shape_->rank_ == (config_dims.ArraySize() + 1));
                     // inconsistent hint
@@ -1337,7 +1495,7 @@ AutoCompleteHelper::FixBatchingSupport()
                     model_support_batching_ = should_batch;
                   }
                 }
-              }
+              } 
             }
           }
         }
@@ -1469,36 +1627,65 @@ AutoCompleteHelper::FillMissingValues(
     RETURN_IF_ERROR(config.Add("dims", std::move(dims)));
   }
 
+  // There may need to be a reshape if batching is enabled. Solving the 
+  // issue of the savedmodel having ambiguous shape and configuration 
+  // defines dimensions which can be batched.
+  if (model_state_->MaxBatchSize() > 0) {
+    triton::common::TritonJson::Value dims;
+    triton::common::TritonJson::Value reshape(
+          model_state_->ModelConfig(),
+          triton::common::TritonJson::ValueType::OBJECT);
+    config.Find("dims", &dims);
+    
+    int64_t first_dim;
+    RETURN_IF_ERROR(dims.IndexAsInt(0, &first_dim));
+    
+    bool found_reshape = config.Find("reshape", &reshape);
+    bool add_empty_reshape_to_config = (dims.ArraySize() == 1) && (first_dim == 1) && !found_reshape;
+    if (add_empty_reshape_to_config) {
+      triton::common::TritonJson::Value reshape_dims(model_state_->ModelConfig(), triton::common::TritonJson::ValueType::ARRAY);
+      RETURN_IF_ERROR(reshape.Add("shape", std::move(reshape_dims)));
+      RETURN_IF_ERROR(config.Add("reshape", std::move(reshape)));
+    }
+  }
+
+
   // Elements in dims should match 'rank'. However, ragged batching is an
   // exception to this rule. A tensor allowing ragged batch should not match
   // with 'rank - 1'.
   if (!using_ragged_batching_) {
-    triton::common::TritonJson::Value current_dims(
-        model_state_->ModelConfig(),
-        triton::common::TritonJson::ValueType::ARRAY);
-    config.Find("dims", &current_dims);
-
-    if (model_support_batching_) {
-      RETURN_ERROR_IF_TRUE(
-          current_dims.ArraySize() != (io->shape_->rank_ - 1),
-          TRITONSERVER_ERROR_INVALID_ARG,
-          std::string(
-              "Number of dimensions (" +
-              std::to_string(current_dims.ArraySize()) + ") given for tensor " +
-              io->name_ + " for model '" + model_state_->Name() +
-              "' in configuration does not match the rank (" +
-              std::to_string(io->shape_->rank_ - 1) +
-              ") of the loaded model."));
+    triton::common::TritonJson::Value current_dims;
+    triton::common::TritonJson::Value reshape;
+    if (config.Find("reshape", &reshape)) {
+      reshape.MemberAsArray("shape", &current_dims);
     } else {
-      RETURN_ERROR_IF_TRUE(
-          current_dims.ArraySize() != io->shape_->rank_,
-          TRITONSERVER_ERROR_INVALID_ARG,
-          std::string(
-              "Number of dimensions (" +
-              std::to_string(current_dims.ArraySize()) + ") given for tensor " +
-              io->name_ + " for model '" + model_state_->Name() +
-              "' in configuration does not match the rank (" +
-              std::to_string(io->shape_->rank_) + ") of the loaded model."));
+      config.MemberAsArray("dims", &current_dims);
+    }
+
+    if (io->shape_->rank_ > 0) {
+      if (model_support_batching_) {
+        RETURN_ERROR_IF_TRUE(
+            current_dims.ArraySize() != (io->shape_->rank_ - 1),
+            TRITONSERVER_ERROR_INVALID_ARG,
+            std::string(
+                "Number of dimensions (" +
+                std::to_string(current_dims.ArraySize()) + ") given for tensor " +
+                io->name_ + " for model '" + model_state_->Name() +
+                "' in configuration does not match the rank (" +
+                std::to_string(io->shape_->rank_ - 1) +
+                ") of the loaded model."));
+      } else {
+        // FIXME: This incorrectly triggers when rank equals 0
+        RETURN_ERROR_IF_TRUE(
+            current_dims.ArraySize() != io->shape_->rank_,
+            TRITONSERVER_ERROR_INVALID_ARG,
+            std::string(
+                "Number of dimensions (" +
+                std::to_string(current_dims.ArraySize()) + ") given for tensor " +
+                io->name_ + " for model '" + model_state_->Name() +
+                "' in configuration does not match the rank (" +
+                std::to_string(io->shape_->rank_) + ") of the loaded model."));
+      }
     }
   }
 
@@ -1537,6 +1724,11 @@ AutoCompleteHelper::CopyList(const TRITONTF_IOList* list)
 TRITONSERVER_Error*
 AutoCompleteHelper::FixIOConfigInputs(const TRITONTF_IOList* reference_list)
 {
+  triton::common::TritonJson::WriteBuffer json_buffer;
+  model_state_->ModelConfig().PrettyWrite(&json_buffer);
+  LOG_MESSAGE(TRITONSERVER_LOG_INFO, (std::string("MODEL CONFIG BEFORE FIX:\n")
+      + json_buffer.Contents()).c_str());
+
   triton::common::TritonJson::Value ios;
   model_state_->ModelConfig().Find("input", &ios);
 
@@ -2001,6 +2193,12 @@ AutoCompleteHelper::FixConfigOutputs(const TRITONTF_IOList* reference_list)
       FillMissingValues(io, current_io);
     }
   }
+  triton::common::TritonJson::WriteBuffer json_buffer;
+  model_state_->ModelConfig().PrettyWrite(&json_buffer);
+  LOG_MESSAGE(TRITONSERVER_LOG_INFO, (std::string("MODEL CONFIG BEFORE FIX:\n")
+      + json_buffer.Contents()).c_str());
+
+
   return nullptr;  // success
 }
 

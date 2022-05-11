@@ -30,6 +30,19 @@
 
 namespace triton { namespace backend { namespace tensorflow {
 
+bool ModelSupportsBatch(std::vector<const TRITONTF_IOList*> model_ios) {
+  for (const auto& ios : model_ios) {
+    for (const TRITONTF_IOList* itr = ios; itr != nullptr; itr = itr->next_) {
+      TRITONTF_IO* io = itr->io_;
+      if ((io->shape_->rank_) != 0 && (io->shape_->dims_[0] != -1)) {
+        return false;
+      } 
+    }
+  }
+
+  return true;
+}
+
 TRITONSERVER_Error*
 CompareDims(
     const std::string& model_name, const std::string& tensor_name,
