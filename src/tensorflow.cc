@@ -60,13 +60,14 @@ using TRITONTFModelHandle = std::shared_ptr<TRITONTF_Model>;
 struct BackendConfiguration {
   BackendConfiguration()
       : allow_gpu_memory_growth_(true), per_process_gpu_memory_fraction_(0.0),
-        allow_soft_placement_(true), memory_limit_mb_()
+        allow_soft_placement_(true), memory_limit_mb_(), default_max_batch_size_(0)
   {
   }
   bool allow_gpu_memory_growth_;
   float per_process_gpu_memory_fraction_;
   bool allow_soft_placement_;
   std::map<int, std::vector<float>> memory_limit_mb_;
+  int default_max_batch_size_;
 };
 
 namespace graphdef {
@@ -1290,17 +1291,31 @@ AutoCompleteHelper::FixBatchingSupport()
   // agree. We need to update the configuration itself as well as the
   // cached value we have already initialized in the model state.
   if (max_batch_size == 0) {
-    const int new_max_batch_size = model_support_batching_ ? 1 : 0;
+    const int new_max_batch_size = model_support_batching_ ? model_state_->BackendConfig()->default_max_batch_size_ : 0;
 
     triton::common::TritonJson::Value mbs_value;
     model_state_->ModelConfig().Find("max_batch_size", &mbs_value);
     mbs_value.SetInt(new_max_batch_size);
 
+    // Turn on dynamic batching if no batching support is supplied by the 
+    // model configuration
+    if (new_max_batch_size > 0) {
+      triton::common::TritonJson::Value value;
+      bool found_sequence_batching = model_state_->ModelConfig().Find("sequence_batching", &value);
+      bool found_dynamic_batching = model_state_->ModelConfig().Find("dynamic_batching", &value);
+      if (!found_sequence_batching && !found_dynamic_batching) {
+        triton::common::TritonJson::Value dynamic_batching(
+          model_state_->ModelConfig(),
+          triton::common::TritonJson::ValueType::OBJECT);
+        model_state_->ModelConfig().Add("dynamic_batching", std::move(dynamic_batching));
+      }
+    }
+
     model_state_->SetMaxBatchSize(new_max_batch_size);
     if (model_support_batching_ == 1) {
       LOG_MESSAGE(
           TRITONSERVER_LOG_WARN,
-          (std::string("autofilled max_batch_size to 1 for model '") +
+          (std::string("autofilled max_batch_size to " + std::to_string(new_max_batch_size) + " for model '") +
            model_state_->Name() +
            "' since batching is supporrted but no max_batch_size is specified "
            "in model configuration. Must specify max_batch_size to utilize "
@@ -2243,6 +2258,12 @@ TRITONBACKEND_Initialize(TRITONBACKEND_Backend* backend)
       RETURN_IF_ERROR(ParseDoubleValue(value_str, &lvalue));
       lconfig->per_process_gpu_memory_fraction_ = lvalue;
       lconfig->allow_gpu_memory_growth_ = (lvalue == 0.0);
+    }
+    if (cmdline.Find("default-max-batch-size", &value)) {
+      RETURN_IF_ERROR(value.AsString(&value_str));
+      int lvalue;
+      RETURN_IF_ERROR(ParseIntValue(value_str, &lvalue));
+      lconfig->default_max_batch_size_ = lvalue;
     }
   }
   RETURN_IF_ERROR(TRITONBACKEND_BackendSetState(
