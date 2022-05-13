@@ -1163,10 +1163,10 @@ class AutoCompleteHelper {
 
   TRITONSERVER_Error* FixConfigOutputs(const TRITONTF_IOList* reference_list);
 
-  void RemoveFromListByName(
+  void RemoveByName(
       const char* name, std::vector<const TRITONTF_IOList*>& list);
 
-  void CopyList(std::vector<const TRITONTF_IOList*>& dst, const TRITONTF_IOList* src);
+  void CopyList(const TRITONTF_IOList* src, std::vector<const TRITONTF_IOList*>& dst);
 
   bool IsEmptyIO(triton::common::TritonJson::Value& value);
 
@@ -1360,11 +1360,18 @@ AutoCompleteHelper::FillMissingValues(
       model_state_->ModelConfig(),
       triton::common::TritonJson::ValueType::OBJECT);
 
-  if (!IsEmptyIO(io_config) && !io_config.Find("name", &tmp)) {
+  bool is_empty_io = IsEmptyIO(io_config);
+  if (!is_empty_io && !io_config.Find("name", &tmp)) {
     return TRITONSERVER_ErrorNew(
           TRITONSERVER_ERROR_INVALID_ARG,
           (std::string("'name' is a required field for all inputs/outputs."))
               .c_str());
+  }
+  
+  // If this I/O is empty then we are using the model
+  // to autocomplete.
+  if (is_empty_io) {
+    io_config.SetStringObject("name", io->name_);
   }
   
   bool found_config_data_type = io_config.Find("data_type", &tmp);
@@ -1418,7 +1425,7 @@ AutoCompleteHelper::FillMissingValues(
 }
 
 void
-AutoCompleteHelper::RemoveFromListByName(
+AutoCompleteHelper::RemoveByName(
     const char* name, std::vector<const TRITONTF_IOList*>& list)
 {
   for (size_t i = 0; i < list.size(); ++i) {
@@ -1431,7 +1438,7 @@ AutoCompleteHelper::RemoveFromListByName(
 }
 
 void
-AutoCompleteHelper::CopyList(std::vector<const TRITONTF_IOList*>& dst, const TRITONTF_IOList* src)
+AutoCompleteHelper::CopyList(const TRITONTF_IOList* src, std::vector<const TRITONTF_IOList*>& dst)
 {
   while (src != nullptr) {
     dst.push_back(src);
@@ -1445,11 +1452,13 @@ AutoCompleteHelper::FixConfigInputs(const TRITONTF_IOList* reference_list)
   triton::common::TritonJson::Value ios;
   model_state_->ModelConfig().Find("input", &ios);
 
-  // Input names must all be defined and match the user provided config.
-  // - If there is an input from the model which is not in config.pbtxt
-  //   then we try to autocomplete it.
+  // Iterate through the model config inputs and keep track of
+  // the ones which we found in the model. Any inputs left in the 
+  // model list, we will attempt to autocomplete after. In the 
+  // event there is an input which is in the model config but 
+  // not in the model, we defer this check till later.
   std::vector<const TRITONTF_IOList*> reference_list_copy;
-  CopyList(reference_list_copy, reference_list);
+  CopyList(reference_list, reference_list_copy);
 
   triton::common::TritonJson::Value current_io(
       model_state_->ModelConfig(),
@@ -1471,7 +1480,7 @@ AutoCompleteHelper::FixConfigInputs(const TRITONTF_IOList* reference_list)
 
     RETURN_IF_ERROR(FillMissingValues(io, current_io));
 
-    RemoveFromListByName(io->name_, reference_list_copy);
+    RemoveByName(io->name_, reference_list_copy);
   }
 
   // Adding configuration from inputs detected in the loaded model
