@@ -1373,7 +1373,7 @@ AutoCompleteHelper::FillMissingValues(
   bool should_auto_complete_data_type =
       !found_config_data_type || DataTypeIsInvalid(data_type_str);
   if (should_auto_complete_data_type) {
-    io_config.SetString("data_type", ConvertToModelConfigString(io->data_type_));
+    io_config.SetStringObject("data_type", ConvertToModelConfigString(io->data_type_));
   }
 
   bool found_dims = io_config.Find("dims", &tmp);
@@ -1630,54 +1630,6 @@ ModelState::AutoCompleteConfig()
   return nullptr;  // success
 }
 
-/*
-  TODO: CHECK FOR THE FOLLOWING:
-----------------------------
-  RETURN_ERROR_IF_TRUE(
-      ios.ArraySize() > reference_list_copy.size(),
-      TRITONSERVER_ERROR_INVALID_ARG,
-      (std::string("Config file specifies too many inputs, ") +
-       std::to_string(ios.ArraySize()) + std::string(", while loaded model '") +
-       model_state_->Name() + std::string("' specifies ") +
-       std::to_string(reference_list_copy.size())));
-
-------------------------------
-  
-  // Elements in dims should match 'rank'. However, ragged batching is an
-  // exception to this rule. A tensor allowing ragged batch should not match
-  // with 'rank - 1'.
-  if (!using_ragged_batching_) {
-    triton::common::TritonJson::Value current_dims(
-        model_state_->ModelConfig(),
-        triton::common::TritonJson::ValueType::ARRAY);
-    io_config.Find("dims", &current_dims);
-
-    if (model_support_batching_) {
-      RETURN_ERROR_IF_TRUE(
-          current_dims.ArraySize() != (io->shape_->rank_ - 1),
-          TRITONSERVER_ERROR_INVALID_ARG,
-          std::string(
-              "Number of dimensions (" +
-              std::to_string(current_dims.ArraySize()) + ") given for tensor " +
-              io->name_ + " for model '" + model_state_->Name() +
-              "' in configuration does not match the rank (" +
-              std::to_string(io->shape_->rank_ - 1) +
-              ") of the loaded model."));
-    } else {
-      RETURN_ERROR_IF_TRUE(
-          current_dims.ArraySize() != io->shape_->rank_,
-          TRITONSERVER_ERROR_INVALID_ARG,
-          std::string(
-              "Number of dimensions (" +
-              std::to_string(current_dims.ArraySize()) + ") given for tensor " +
-              io->name_ + " for model '" + model_state_->Name() +
-              "' in configuration does not match the rank (" +
-              std::to_string(io->shape_->rank_) + ") of the loaded model."));
-    }
-  }
-
-
-*/
 TRITONSERVER_Error*
 ModelState::ValidateModelConfig()
 {
