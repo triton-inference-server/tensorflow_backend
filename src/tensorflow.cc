@@ -1168,8 +1168,6 @@ class AutoCompleteHelper {
 
   void CopyList(const TRITONTF_IOList* src, std::vector<const TRITONTF_IOList*>& dst);
 
-  bool IsEmptyIO(triton::common::TritonJson::Value& value);
-
   TRITONSERVER_Error* FillMissingValues(
       const TRITONTF_IO* io, triton::common::TritonJson::Value& config);
 
@@ -1342,16 +1340,6 @@ AutoCompleteHelper::FixBatchingSupport()
   return nullptr;  // success
 }
 
-bool
-AutoCompleteHelper::IsEmptyIO(triton::common::TritonJson::Value& io_config) {
-  std::vector<std::string> members;
-  io_config.Members(&members);
-  if (members.empty()){ 
-    return true;
-  }
-  return false;
-}
-
 TRITONSERVER_Error*
 AutoCompleteHelper::FillMissingValues(
     const TRITONTF_IO* io, triton::common::TritonJson::Value& io_config)
@@ -1360,7 +1348,7 @@ AutoCompleteHelper::FillMissingValues(
       model_state_->ModelConfig(),
       triton::common::TritonJson::ValueType::OBJECT);
 
-  bool is_empty_io = IsEmptyIO(io_config);
+  bool is_empty_io = io_config.Empty();
   if (!is_empty_io && !io_config.Find("name", &tmp)) {
     return TRITONSERVER_ErrorNew(
           TRITONSERVER_ERROR_INVALID_ARG,
