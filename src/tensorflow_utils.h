@@ -49,6 +49,10 @@ TRITONSERVER_Error* CompareDims(
 const TRITONTF_IO* FindIOByName(
     const TRITONTF_IOList* ios, const std::string& name);
 
+/// \return a named input/output tensor. Return nullptr if not found.
+const TRITONTF_IO* FindIOByName(
+    const std::vector<const TRITONTF_IOList*> ios, std::string& name);
+
 // Convert a vector representing a shape to string representation.
 /// \param dims The vector of dimensions to be converted.
 /// \return String representation of the vector in pattern
@@ -59,6 +63,9 @@ std::string ShapeToString(
 /// \return true if a TF data-type matches a model configuration
 /// data-type.
 bool CompareDataType(TRITONTF_DataType model_dtype, const std::string& dtype);
+
+/// \return true if a model configuration data-type is invalid
+bool DataTypeIsInvalid(const std::string& dtype);
 
 /// \return the TRITONSERVER data-type that corresponds to a
 /// TRITONTF data-type.

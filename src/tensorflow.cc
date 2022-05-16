@@ -1159,9 +1159,17 @@ class AutoCompleteHelper {
 
  private:
   TRITONSERVER_Error* FixBatchingSupport();
-  TRITONSERVER_Error* FixIOConfig(
-      const TRITONTF_IOList* reference_list, const char* key);
+  TRITONSERVER_Error* FixConfigInputs(const TRITONTF_IOList* reference_list);
 
+  TRITONSERVER_Error* FixConfigOutputs(const TRITONTF_IOList* reference_list);
+
+  void RemoveByName(
+      const char* name, std::vector<const TRITONTF_IOList*>& list);
+
+  void CopyList(const TRITONTF_IOList* src, std::vector<const TRITONTF_IOList*>& dst);
+
+  TRITONSERVER_Error* FillMissingValues(
+      const TRITONTF_IO* io, triton::common::TritonJson::Value& config);
 
   ModelState* model_state_;
   std::unique_ptr<TRITONTF_Model, decltype(&TRITONTF_ModelDelete)>
@@ -1179,11 +1187,11 @@ AutoCompleteHelper::Fix()
 
   // Inputs
   const TRITONTF_IOList* inputs = TRITONTF_ModelInputs(tritontf_model_.get());
-  RETURN_IF_ERROR(FixIOConfig(inputs, "input"));
+  RETURN_IF_ERROR(FixConfigInputs(inputs));
 
   // Outputs
   const TRITONTF_IOList* outputs = TRITONTF_ModelOutputs(tritontf_model_.get());
-  RETURN_IF_ERROR(FixIOConfig(outputs, "output"));
+  RETURN_IF_ERROR(FixConfigOutputs(outputs));
 
   return nullptr;  // success
 }
@@ -1333,61 +1341,187 @@ AutoCompleteHelper::FixBatchingSupport()
 }
 
 TRITONSERVER_Error*
-AutoCompleteHelper::FixIOConfig(
-    const TRITONTF_IOList* reference_list, const char* key)
+AutoCompleteHelper::FillMissingValues(
+    const TRITONTF_IO* io, triton::common::TritonJson::Value& io_config)
 {
-  // Replace I/O even if inputs / outputs are specified in config.
-  triton::common::TritonJson::Value ios;
-  bool found_ios = model_state_->ModelConfig().Find(key, &ios);
-
-  triton::common::TritonJson::Value auto_complete_ios(
+  triton::common::TritonJson::Value tmp(
       model_state_->ModelConfig(),
-      triton::common::TritonJson::ValueType::ARRAY);
-  for (const TRITONTF_IOList* itr = reference_list; itr != nullptr;
-       itr = itr->next_) {
-    TRITONTF_IO* io = itr->io_;
+      triton::common::TritonJson::ValueType::OBJECT);
 
-    triton::common::TritonJson::Value auto_complete_io(
-        model_state_->ModelConfig(),
-        triton::common::TritonJson::ValueType::OBJECT);
-    RETURN_IF_ERROR(auto_complete_io.AddString("name", io->name_));
-    RETURN_IF_ERROR(auto_complete_io.AddString(
-        "data_type", ConvertToModelConfigString(io->data_type_)));
+  bool is_empty_io = io_config.IsEmpty();
+  if (!is_empty_io && !io_config.Find("name", &tmp)) {
+    return TRITONSERVER_ErrorNew(
+          TRITONSERVER_ERROR_INVALID_ARG,
+          (std::string("'name' is a required field for all inputs/outputs."))
+              .c_str());
+  }
+  
+  // If this I/O is empty then we are using the model
+  // to autocomplete.
+  if (is_empty_io) {
+    io_config.SetStringObject("name", io->name_);
+  }
+  
+  bool found_config_data_type = io_config.Find("data_type", &tmp);
+  std::string data_type_str;
+  tmp.AsString(&data_type_str);
+  bool should_auto_complete_data_type =
+      !found_config_data_type || DataTypeIsInvalid(data_type_str);
+  if (should_auto_complete_data_type) {
+    io_config.SetStringObject("data_type", ConvertToModelConfigString(io->data_type_));
+  }
+
+  bool found_dims = io_config.Find("dims", &tmp);
+  bool should_auto_complete_dims = !found_dims || (tmp.ArraySize() == 0);
+  if (should_auto_complete_dims) {
+    RETURN_ERROR_IF_TRUE(
+        io->shape_->rank_ == 0, TRITONSERVER_ERROR_INVALID_ARG,
+        std::string(
+            "Unable to autofill for '" + model_state_->Name() +
+            "': the rank of model tensor '" + io->name_ +
+            "' is 0 and dimensions are not defined"));
+    // The model signature supports batching then the first
+    // dimension is -1 and should not appear in the model
+    // configuration 'dims' that we are creating.
     triton::common::TritonJson::Value dims(
         model_state_->ModelConfig(),
         triton::common::TritonJson::ValueType::ARRAY);
 
-    // look at the loaded config, if there is one, for a hint about the
-    // rank of the model.
-    if (io->shape_->rank_ == 0 && found_ios) {
-      // If rank is 0 then we have to rely on the provided config to determine
-      // the dimensions of the inputs/outputs
-      size_t io_size = ios.ArraySize();
+    for (size_t i = (model_support_batching_ ? 1 : 0); i < io->shape_->rank_;
+         ++i) {
+      RETURN_IF_ERROR(dims.AppendInt(io->shape_->dims_[i]));
+    }
+    if (dims.ArraySize() == 0) {
+      RETURN_IF_ERROR(dims.AppendInt(1));
+      triton::common::TritonJson::Value reshape(
+          model_state_->ModelConfig(),
+          triton::common::TritonJson::ValueType::OBJECT);
+      triton::common::TritonJson::Value reshape_dims(
+          model_state_->ModelConfig(),
+          triton::common::TritonJson::ValueType::ARRAY);
+      RETURN_IF_ERROR(reshape.Add("shape", std::move(reshape_dims)));
+      RETURN_IF_ERROR(io_config.Add("reshape", std::move(reshape)));
+    }
+
+    if (found_dims) {
+      RETURN_IF_ERROR(io_config.Remove("dims"));
+    }
+    RETURN_IF_ERROR(io_config.Add("dims", std::move(dims)));
+  } // end of should_auto_complete_dims
+
+  return nullptr;  // Success
+}
+
+void
+AutoCompleteHelper::RemoveByName(
+    const char* name, std::vector<const TRITONTF_IOList*>& list)
+{
+  for (size_t i = 0; i < list.size(); ++i) {
+    const TRITONTF_IOList* current = list.at(i);
+    if (!strcmp(name, current->io_->name_)) {
+      list.erase(list.begin() + i);
+      return;
+    }
+  }
+}
+
+void
+AutoCompleteHelper::CopyList(const TRITONTF_IOList* src, std::vector<const TRITONTF_IOList*>& dst)
+{
+  while (src != nullptr) {
+    dst.push_back(src);
+    src = src->next_;
+  }
+}
+
+TRITONSERVER_Error*
+AutoCompleteHelper::FixConfigInputs(const TRITONTF_IOList* reference_list)
+{
+  triton::common::TritonJson::Value ios;
+  model_state_->ModelConfig().Find("input", &ios);
+
+  // Iterate through the model config inputs and keep track of
+  // the ones which we found in the model. Any inputs left in the 
+  // model list, we will attempt to autocomplete after. In the 
+  // event there is an input which is in the model config but 
+  // not in the model, we defer this check till later.
+  std::vector<const TRITONTF_IOList*> reference_list_copy;
+  CopyList(reference_list, reference_list_copy);
+
+  triton::common::TritonJson::Value current_io(
+      model_state_->ModelConfig(),
+      triton::common::TritonJson::ValueType::OBJECT);
+  for (size_t i = 0; i < ios.ArraySize(); ++i) {
+    ios.IndexAsObject(i, &current_io);
+
+    triton::common::TritonJson::Value current_name(
+        model_state_->ModelConfig(),
+        triton::common::TritonJson::ValueType::OBJECT);
+    std::string config_name;
+    RETURN_IF_ERROR(current_io.MemberAsString("name", &config_name));
+
+    const TRITONTF_IO* io =
+        FindIOByName(reference_list_copy, config_name);
+    if (io == nullptr) {
+      continue;
+    }
+
+    RETURN_IF_ERROR(FillMissingValues(io, current_io));
+
+    RemoveByName(io->name_, reference_list_copy);
+  }
+
+  // Adding configuration from inputs detected in the loaded model
+  // but not found in the model configuration.
+  for (size_t i = 0; i < reference_list_copy.size(); ++i) {
+    const TRITONTF_IOList* current = reference_list_copy.at(i);
+    TRITONTF_IO* io = current->io_;
+
+    triton::common::TritonJson::Value blank_value(
+        model_state_->ModelConfig(),
+        triton::common::TritonJson::ValueType::OBJECT);
+
+    RETURN_IF_ERROR(FillMissingValues(io, blank_value));
+
+    ios.Append(std::move(blank_value));
+  }
+  reference_list_copy.clear();
+
+  return nullptr;  // success
+}
+
+TRITONSERVER_Error*
+AutoCompleteHelper::FixConfigOutputs(const TRITONTF_IOList* reference_list)
+{
+  triton::common::TritonJson::Value ios;
+  bool found_ios = model_state_->ModelConfig().Find("output", &ios);
+
+  // If output is empty or undefined then autocomplete this otherwise
+  // only check the defined outputs
+  bool should_auto_complete_output = (!found_ios || ios.ArraySize() == 0);
+  if (should_auto_complete_output) {
+    triton::common::TritonJson::Value auto_complete_ios(
+        model_state_->ModelConfig(),
+        triton::common::TritonJson::ValueType::ARRAY);
+    for (const TRITONTF_IOList* itr = reference_list; itr != nullptr;
+         itr = itr->next_) {
+      const TRITONTF_IO* io = itr->io_;
+
+      triton::common::TritonJson::Value auto_complete_io(
+          model_state_->ModelConfig(),
+          triton::common::TritonJson::ValueType::OBJECT);
+      RETURN_IF_ERROR(auto_complete_io.AddString("name", io->name_));
+      RETURN_IF_ERROR(auto_complete_io.AddString(
+          "data_type", ConvertToModelConfigString(io->data_type_)));
+      triton::common::TritonJson::Value dims(
+          model_state_->ModelConfig(),
+          triton::common::TritonJson::ValueType::ARRAY);
       RETURN_ERROR_IF_TRUE(
-          io_size == 0, TRITONSERVER_ERROR_INVALID_ARG,
+          io->shape_->rank_ == 0, TRITONSERVER_ERROR_INVALID_ARG,
           std::string(
               "Unable to autofill for '" + model_state_->Name() +
               "': the rank of model tensor '" + io->name_ +
-              "' is 0 and dimensions are not defined for all " + key));
-
-      triton::common::TritonJson::Value check_dims(
-          model_state_->ModelConfig(),
-          triton::common::TritonJson::ValueType::OBJECT);
-      for (size_t i = 0; i < io_size; ++i) {
-        triton::common::TritonJson::Value current_io_object(
-            model_state_->ModelConfig(),
-            triton::common::TritonJson::ValueType::OBJECT);
-        ios.IndexAsObject(i, &current_io_object);
-
-        bool found_dims = current_io_object.Find("dims", &check_dims);
-        RETURN_ERROR_IF_TRUE(
-            !found_dims, TRITONSERVER_ERROR_INVALID_ARG,
-            std::string(
-                "Unable to autofill for '" + model_state_->Name() +
-                "': the rank of model tensor '" + io->name_ +
-                "' is 0 and dimensions are not defined for all " + key));
-      }
-    } else if (io->shape_->rank_ > 0 && !found_ios) {
+              "' is 0 which is not supported"));
       // The model signature supports batching then the first
       // dimension is -1 and should not appear in the model
       // configuration 'dims' that we are creating.
@@ -1411,66 +1545,32 @@ AutoCompleteHelper::FixIOConfig(
       }
       RETURN_IF_ERROR(auto_complete_io.Add("dims", std::move(dims)));
       RETURN_IF_ERROR(auto_complete_ios.Append(std::move(auto_complete_io)));
-
-      model_state_->ModelConfig().Add(key, std::move(auto_complete_ios));
-    } else if (io->shape_->rank_ > 0 && found_ios) {
-      // The number of elements in dims should match 'rank - 1'
-      // when the model supports batching; otherwise, number of
-      // elements in dims should match 'rank'. This does not
-      // try to overwrite the user provided configuration, throws
-      // error instead.
-      // However, ragged batching is an exception to this rule. A
-      // tensor allowing ragged batch should not match with
-      // 'rank - 1'.
-      size_t io_size = ios.ArraySize();
-      for (size_t i = 0; i < io_size; ++i) {
-        triton::common::TritonJson::Value current_io_object(
-            model_state_->ModelConfig(),
-            triton::common::TritonJson::ValueType::OBJECT);
-        ios.IndexAsObject(i, &current_io_object);
-
-        if (!using_ragged_batching_) {
-          triton::common::TritonJson::Value current_dims(
-              model_state_->ModelConfig(),
-              triton::common::TritonJson::ValueType::ARRAY);
-          current_io_object.Find("dims", &current_dims);
-
-          if (model_support_batching_) {
-            RETURN_ERROR_IF_TRUE(
-                current_dims.ArraySize() != (io->shape_->rank_ - 1),
-                TRITONSERVER_ERROR_INVALID_ARG,
-                std::string(
-                    "Number of dimensions (" +
-                    std::to_string(current_dims.ArraySize()) +
-                    ") given for tensor " + io->name_ + " for model '" +
-                    model_state_->Name() +
-                    "' in configuration does not match the rank (" +
-                    std::to_string(io->shape_->rank_ - 1) +
-                    ") of the loaded model."));
-          } else {
-            RETURN_ERROR_IF_TRUE(
-                current_dims.ArraySize() != io->shape_->rank_,
-                TRITONSERVER_ERROR_INVALID_ARG,
-                std::string(
-                    "Number of dimensions (" +
-                    std::to_string(dims.ArraySize()) + ") given for tensor " +
-                    io->name_ + " for model '" + model_state_->Name() +
-                    "' in configuration does not match the rank (" +
-                    std::to_string(io->shape_->rank_) +
-                    ") of the loaded model."));
-          }
-        }
-      }
+    }
+    if (found_ios) {
+      ios.Swap(auto_complete_ios);
     } else {
-      RETURN_ERROR_IF_TRUE(
-          io->shape_->rank_ == 0, TRITONSERVER_ERROR_INVALID_ARG,
-          std::string(
-              "Unable to autofill for '" + model_state_->Name() +
-              "': the rank of model tensor '" + io->name_ +
-              "' is 0 which is not supported"));
+      model_state_->ModelConfig().Add("output", std::move(auto_complete_ios));
+    }
+  } else {
+    // Outputs not specified in the configuration will be ignored; hence, 
+    // iterate over the config outputs and not all model outputs.
+    triton::common::TritonJson::Value current_io(
+        model_state_->ModelConfig(),
+        triton::common::TritonJson::ValueType::OBJECT);
+    for (size_t i = 0; i < ios.ArraySize(); ++i) {
+      ios.IndexAsObject(i, &current_io);
+
+      std::string output_name;
+      RETURN_IF_ERROR(current_io.MemberAsString("name", &output_name));
+
+      const TRITONTF_IO* io = FindIOByName(reference_list, output_name);
+      if (io == nullptr) {
+        continue;
+      }
+
+      FillMissingValues(io, current_io);
     }
   }
-
   return nullptr;  // success
 }
 
