@@ -1348,7 +1348,7 @@ AutoCompleteHelper::FillMissingValues(
       model_state_->ModelConfig(),
       triton::common::TritonJson::ValueType::OBJECT);
 
-  bool is_empty_io = io_config.Empty();
+  bool is_empty_io = io_config.IsEmpty();
   if (!is_empty_io && !io_config.Find("name", &tmp)) {
     return TRITONSERVER_ErrorNew(
           TRITONSERVER_ERROR_INVALID_ARG,
