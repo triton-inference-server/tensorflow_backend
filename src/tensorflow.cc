@@ -1207,7 +1207,7 @@ AutoCompleteHelper::FixBatchingSupport()
     }
   }
 
-  const int max_batch_size = model_state_->MaxBatchSize();
+  int max_batch_size = model_state_->MaxBatchSize();
 
   // If max-batch-size is explicitly set to non-zero but the model
   // signature doesn't support batching then can't autofill.
@@ -1293,7 +1293,7 @@ AutoCompleteHelper::FixBatchingSupport()
   if (max_batch_size == 0) {
     // 0 is a valid parameter for the default-max-batch-size but it is
     // not valid for models which explicitly support batching.
-    const int new_max_batch_size =
+    max_batch_size =
         model_support_batching_
             ? std::max(
                   model_state_->BackendConfig()->default_max_batch_size_, 1)
@@ -1301,32 +1301,14 @@ AutoCompleteHelper::FixBatchingSupport()
 
     triton::common::TritonJson::Value mbs_value;
     model_state_->ModelConfig().Find("max_batch_size", &mbs_value);
-    mbs_value.SetInt(new_max_batch_size);
-
-    // Turn on dynamic batching if no batching support is supplied by the
-    // model configuration
-    if (new_max_batch_size > 1) {
-      triton::common::TritonJson::Value value;
-      bool found_sequence_batching =
-          model_state_->ModelConfig().Find("sequence_batching", &value);
-      bool found_dynamic_batching =
-          model_state_->ModelConfig().Find("dynamic_batching", &value);
-      if (!found_sequence_batching && !found_dynamic_batching) {
-        triton::common::TritonJson::Value dynamic_batching(
-            model_state_->ModelConfig(),
-            triton::common::TritonJson::ValueType::OBJECT);
-        model_state_->ModelConfig().Add(
-            "dynamic_batching", std::move(dynamic_batching));
-      }
-    }
-
-    model_state_->SetMaxBatchSize(new_max_batch_size);
+    mbs_value.SetInt(max_batch_size);
+    model_state_->SetMaxBatchSize(max_batch_size);
     if (model_support_batching_ == 1) {
       LOG_MESSAGE(
           TRITONSERVER_LOG_WARN,
           (std::string(
                "autofilled max_batch_size to " +
-               std::to_string(new_max_batch_size) + " for model '") +
+               std::to_string(max_batch_size) + " for model '") +
            model_state_->Name() +
            "' since batching is supporrted but no max_batch_size is specified "
            "in model configuration. Must specify max_batch_size to utilize "
@@ -1334,6 +1316,24 @@ AutoCompleteHelper::FixBatchingSupport()
               .c_str());
     }
   }
+
+  // Turn on dynamic batch scheduler if batch size is greater
+  // than 1 and there is no scheduler defined in the configuration.
+  if (max_batch_size > 1) {
+    triton::common::TritonJson::Value value;
+    bool found_sequence_batching =
+        model_state_->ModelConfig().Find("sequence_batching", &value);
+    bool found_dynamic_batching =
+        model_state_->ModelConfig().Find("dynamic_batching", &value);
+    if (!found_sequence_batching && !found_dynamic_batching) {
+      triton::common::TritonJson::Value dynamic_batching(
+          model_state_->ModelConfig(),
+          triton::common::TritonJson::ValueType::OBJECT);
+      model_state_->ModelConfig().Add(
+          "dynamic_batching", std::move(dynamic_batching));
+    }
+  }
+
 
   return nullptr;  // success
 }
