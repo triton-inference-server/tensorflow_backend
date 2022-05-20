@@ -1278,19 +1278,16 @@ AutoCompleteHelper::FixBatchingSupport()
                 TRITONTF_IO* io = itr->io_;
                 if (config_name == io->name_) {
                   bool model_io_explicit = io->shape_->rank_ > 0;
-                  bool model_shape_matches_config_shape =
-                      io->shape_->rank_ == config_dims.ArraySize() + 1
+                  bool model_shape_matches_config_shape_plus_1 =
+                      io->shape_->rank_ == config_dims.ArraySize() + 1;
 
-                                               // Check for false hints
-                                               if (!model_io_explicit &&
-                                                   config_dims.ArraySize() == 0)
-                  {
+                  // Check for false hints
+                  if (!model_io_explicit && config_dims.ArraySize() == 0) {
                     // don't have enough information to batch
                     config_batch_hint = false;
-                  }
-                  else if (
-                      model_io_explicit && !model_shape_matches_config_shape)
-                  {
+                  } else if (
+                      model_io_explicit &&
+                      !model_shape_matches_config_shape_plus_1) {
                     // inconsistent user provided input
                     return TRITONSERVER_ErrorNew(
                         TRITONSERVER_ERROR_INTERNAL,
