@@ -1287,18 +1287,19 @@ AutoCompleteHelper::FixBatchingSupport()
     }
   }
 
-  // Set max-batch-size to 1 if the model signature and config hint
+  // max_batch_size = 0 is ambiguous as to whether or not the
+  // user set this value in the config or omitted it. Assume
+  // omitted if model supports batching and check
+  // default_max_batch_size.
+  if (model_support_batching_ && max_batch_size == 0) {
+    max_batch_size =
+        std::max(model_state_->BackendConfig()->default_max_batch_size_, 0);
+  }
+
+  // Set max-batch-size to current value if the model signature and config hint
   // agree. We need to update the configuration itself as well as the
   // cached value we have already initialized in the model state.
-  if (max_batch_size == 0) {
-    // 0 is a valid parameter for the default-max-batch-size but it is
-    // not valid for models which explicitly support batching.
-    max_batch_size =
-        model_support_batching_
-            ? std::max(
-                  model_state_->BackendConfig()->default_max_batch_size_, 1)
-            : 0;
-
+  if (max_batch_size != 0) {
     triton::common::TritonJson::Value mbs_value;
     model_state_->ModelConfig().Find("max_batch_size", &mbs_value);
     mbs_value.SetInt(max_batch_size);
@@ -1368,11 +1369,12 @@ AutoCompleteHelper::FixIOConfig(
             "unable to autofill for '" + model_state_->Name() +
             "': the rank of model tensor '" + io->name_ +
             "' is 0 which is not supported"));
-    // The model signature supports batching then the first
-    // dimension is -1 and should not appear in the model
-    // configuration 'dims' that we are creating.
-    for (size_t i = (model_support_batching_ ? 1 : 0); i < io->shape_->rank_;
-         ++i) {
+    // If the model supports batching and the max_batch_size
+    // is 0, then batching is turned off and the IO dimensions
+    // must be explicit.
+    size_t start_index =
+        (model_support_batching_ && model_state_->MaxBatchSize() > 0) ? 1 : 0;
+    for (size_t i = start_index; i < io->shape_->rank_; ++i) {
       RETURN_IF_ERROR(dims.AppendInt(io->shape_->dims_[i]));
     }
 
