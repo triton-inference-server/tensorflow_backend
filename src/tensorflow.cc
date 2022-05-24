@@ -1372,7 +1372,7 @@ AutoCompleteHelper::FixIOConfig(
     // If the model supports batching and the max_batch_size
     // is 0, then batching is turned off and the IO dimensions
     // must be explicit.
-    size_t start_index =
+    const size_t start_index =
         (model_support_batching_ && model_state_->MaxBatchSize() > 0) ? 1 : 0;
     for (size_t i = start_index; i < io->shape_->rank_; ++i) {
       RETURN_IF_ERROR(dims.AppendInt(io->shape_->dims_[i]));
