@@ -1277,29 +1277,32 @@ AutoCompleteHelper::FixBatchingSupport()
                    itr != nullptr; itr = itr->next_) {
                 TRITONTF_IO* io = itr->io_;
                 if (config_name == io->name_) {
-                  bool model_io_explicit = io->shape_->rank_ > 0;
-                  bool model_shape_matches_config_shape_plus_1 =
-                      io->shape_->rank_ == config_dims.ArraySize() + 1;
 
-                  // Check for false hints
-                  if (!model_io_explicit && config_dims.ArraySize() == 0) {
-                    // don't have enough information to batch
+                  bool model_io_explicit = io->shape_->rank_ > 0;
+                  bool user_config_is_defined = config_dims.ArraySize() > 0;
+
+                  if (model_io_explicit && user_config_is_defined) {
+                    if (config_dims.ArraySize() == io->shape_->rank_) {
+                      int64_t first_config_dim = 0;
+                      config_dims.IndexAsInt(0, &first_config_dim);
+                      if (first_config_dim != -1) {
+                        config_batch_hint = false;
+                      }                    
+                    } else if (config_dims.ArraySize()-1 != io->shape_->rank_) {
+                      // Defer error to validation
+                      config_batch_hint = false;
+                    }
+                  } else if (!model_io_explicit && user_config_is_defined) {
+                    int64_t first_config_dim = 0;
+                    config_dims.IndexAsInt(0, &first_config_dim);
+                    if (first_config_dim != -1) {
+                      config_batch_hint = false;
+                    }                                        
+                  } else { // (!model_io_explicit && !user_config_is_defined)
+                    // Defer error to validation
                     config_batch_hint = false;
-                  } else if (
-                      model_io_explicit &&
-                      !model_shape_matches_config_shape_plus_1) {
-                    // inconsistent user provided input
-                    return TRITONSERVER_ErrorNew(
-                        TRITONSERVER_ERROR_INTERNAL,
-                        std::string(
-                            "unable to autofill for '" + model_state_->Name() +
-                            "', model tensor configurations are "
-                            "contradicting " +
-                            "each other in terms of whether batching is "
-                            "supported")
-                            .c_str());
                   }
-                  break;
+                  break; // TRITONTF_IOList* itr
                 }
               }
             }
