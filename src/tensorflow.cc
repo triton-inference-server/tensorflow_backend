@@ -1287,29 +1287,24 @@ AutoCompleteHelper::FixBatchingSupport()
     }
   }
 
-  // max_batch_size = 0 is ambiguous as to whether or not the
-  // user set this value in the config or omitted it. Assume
-  // omitted if model supports batching and check
-  // default_max_batch_size.
-  if (model_support_batching_ && max_batch_size == 0) {
-    max_batch_size =
-        std::max(model_state_->BackendConfig()->default_max_batch_size_, 0);
-  }
+  if (max_batch_size == 0) {
+    const int new_max_batch_size =
+        model_support_batching_
+            ? std::max(
+                  model_state_->BackendConfig()->default_max_batch_size_, 0)
+            : 0;
 
-  // Set max-batch-size to current value if the model signature and config hint
-  // agree. We need to update the configuration itself as well as the
-  // cached value we have already initialized in the model state.
-  if (max_batch_size != 0) {
     triton::common::TritonJson::Value mbs_value;
     model_state_->ModelConfig().Find("max_batch_size", &mbs_value);
-    mbs_value.SetInt(max_batch_size);
-    model_state_->SetMaxBatchSize(max_batch_size);
+    mbs_value.SetInt(new_max_batch_size);
+    model_state_->SetMaxBatchSize(new_max_batch_size);
+    max_batch_size = new_max_batch_size;
     if (model_support_batching_ == 1) {
       LOG_MESSAGE(
           TRITONSERVER_LOG_WARN,
           (std::string(
                "autofilled max_batch_size to " +
-               std::to_string(max_batch_size) + " for model '") +
+               std::to_string(new_max_batch_size) + " for model '") +
            model_state_->Name() +
            "' since batching is supporrted but no max_batch_size is specified "
            "in model configuration. Must specify max_batch_size to utilize "
