@@ -1290,7 +1290,6 @@ AutoCompleteHelper::FixBatchingSupport()
                    itr != nullptr; itr = itr->next_) {
                 TRITONTF_IO* io = itr->io_;
                 if (config_name == io->name_) {
-
                   bool model_io_explicit = io->shape_->rank_ > 0;
                   bool user_config_is_defined = config_dims.ArraySize() > 0;
 
@@ -1300,8 +1299,9 @@ AutoCompleteHelper::FixBatchingSupport()
                       config_dims.IndexAsInt(0, &first_config_dim);
                       if (first_config_dim != -1) {
                         config_batch_hint = false;
-                      }                    
-                    } else if (config_dims.ArraySize()-1 != io->shape_->rank_) {
+                      }
+                    } else if (
+                        config_dims.ArraySize() - 1 != io->shape_->rank_) {
                       // Defer error to validation
                       config_batch_hint = false;
                     }
@@ -1310,12 +1310,12 @@ AutoCompleteHelper::FixBatchingSupport()
                     config_dims.IndexAsInt(0, &first_config_dim);
                     if (first_config_dim != -1) {
                       config_batch_hint = false;
-                    }                                        
-                  } else { // (!model_io_explicit && !user_config_is_defined)
+                    }
+                  } else {  // (!model_io_explicit && !user_config_is_defined)
                     // Defer error to validation
                     config_batch_hint = false;
                   }
-                  break; // TRITONTF_IOList* itr
+                  break;  // TRITONTF_IOList* itr
                 }
               }
             }
@@ -1650,6 +1650,35 @@ AutoCompleteHelper::FixConfigInputs(const TRITONTF_IOList* reference_list)
     RETURN_IF_ERROR(FillMissingValues(io, current_io));
 
     RemoveByName(io->name_, reference_list_copy);
+  }
+
+  // Ragged batching can have batch_input which are inputs in the
+  // the model config. Unfortunately these cannot autocomplete,
+  // so just check them off so they're not duplicated.
+  triton::common::TritonJson::Value batch_inputs(
+      model_state_->ModelConfig(),
+      triton::common::TritonJson::ValueType::ARRAY);
+  model_state_->ModelConfig().Find("batch_input", &batch_inputs);
+  for (size_t i = 0; i < batch_inputs.ArraySize(); ++i) {
+    batch_inputs.IndexAsObject(i, &current_io);
+
+    triton::common::TritonJson::Value target_names(
+        model_state_->ModelConfig(),
+        triton::common::TritonJson::ValueType::ARRAY);
+    RETURN_IF_ERROR(current_io.MemberAsArray("target_name", &target_names));
+
+    std::string current_name_str;
+    for (size_t j = 0; j < target_names.ArraySize(); ++j) {
+      target_names.IndexAsString(j, &current_name_str);
+
+      const TRITONTF_IO* io =
+          FindIOByName(reference_list_copy, current_name_str);
+      if (io == nullptr) {
+        continue;
+      }
+
+      RemoveByName(io->name_, reference_list_copy);
+    }
   }
 
   // Adding configuration from inputs detected in the loaded model
