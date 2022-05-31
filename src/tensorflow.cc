@@ -1277,7 +1277,6 @@ AutoCompleteHelper::FixBatchingSupport()
                    itr != nullptr; itr = itr->next_) {
                 TRITONTF_IO* io = itr->io_;
                 if (config_name == io->name_) {
-
                   bool model_io_explicit = io->shape_->rank_ > 0;
                   bool user_config_is_defined = config_dims.ArraySize() > 0;
 
@@ -1287,8 +1286,9 @@ AutoCompleteHelper::FixBatchingSupport()
                       config_dims.IndexAsInt(0, &first_config_dim);
                       if (first_config_dim != -1) {
                         config_batch_hint = false;
-                      }                    
-                    } else if (config_dims.ArraySize()-1 != io->shape_->rank_) {
+                      }
+                    } else if (
+                        config_dims.ArraySize() - 1 != io->shape_->rank_) {
                       // Defer error to validation
                       config_batch_hint = false;
                     }
@@ -1297,12 +1297,13 @@ AutoCompleteHelper::FixBatchingSupport()
                     config_dims.IndexAsInt(0, &first_config_dim);
                     if (first_config_dim != -1) {
                       config_batch_hint = false;
-                    }                                        
-                  } else { // (!model_io_explicit && !user_config_is_defined)
+                    }
+                  } else if (!model_io_explicit && !user_config_is_defined) {
                     // Defer error to validation
                     config_batch_hint = false;
-                  }
-                  break; // TRITONTF_IOList* itr
+                  }  // else (model_io_explicit && !user_config_is_defined)
+
+                  break;  // TRITONTF_IOList* itr
                 }
               }
             }
