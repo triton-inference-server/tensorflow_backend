@@ -1226,24 +1226,21 @@ AutoCompleteHelper::FixBatchingSupport()
 
   bool config_batch_hint = false;
   if (sig_supports_batch) {
+    // When the rank of an I/O is greater than 0 and the 
+    // model config I/O dimensions has size greater than 
+    // 0, then this is a strong hint at for/against batching.
     enum struct ExplicitBatchHint {
       UNSET,
       TRUE,
       FALSE
     };
-    // When the rank of an I/O is greater than 0 and the 
-    // model config I/O dimensions has size greater than 
-    // 0, then this is a strong hint at for/against batching.
-    // assume false
     ExplicitBatchHint config_explicit_hint = ExplicitBatchHint::UNSET;
 
-    // KMTODO: UPDATE COMMENT
-    // Checked for early out already so assume batching unless
-    // proven otherwise. Need to check
-    // to make sure the ambiguous I/Os are defined by the
-    // user. If so, then we assume the model can batch.
-    // If not, then we have an empty shape which we cannot
-    // determine batching support for and turn off batching.
+    // 'model_support_batching_' is set to be true when all model inputs have
+    // variable size first dimension, but it is not necessary to be the case
+    // (i.e. non-batch model with variable size tensors). As 'max_batch_size == 0'
+    // from existing config is also ambiguous, it can be either unspecified or
+    // no-batch, autofill will check specified input/output (if any) for hint.
     config_batch_hint = false;
     triton::common::TritonJson::Value config_inputs(
         model_state_->ModelConfig(),
@@ -1293,9 +1290,7 @@ AutoCompleteHelper::FixBatchingSupport()
                   bool model_io_explicit = io->shape_->rank_ > 0;
                   bool user_config_is_defined = config_dims.ArraySize() > 0;
 
-                  if (!model_io_explicit) {
-                    config_batch_hint = false;
-                  } else if (model_io_explicit && !user_config_is_defined) {
+                  if (model_io_explicit && !user_config_is_defined) {
                     config_batch_hint = true;
                   } else if (model_io_explicit && user_config_is_defined) {
                     
@@ -1317,9 +1312,7 @@ AutoCompleteHelper::FixBatchingSupport()
                               "each other in terms of whether batching is "
                               "supported").c_str());
                       }
-                    } else {
-                      config_batch_hint = false;
-                      
+                    } else {                      
                       // Check if the model configuration had other I/Os 
                       // which contradict this one
                       if (config_explicit_hint == ExplicitBatchHint::UNSET) {
