@@ -1226,13 +1226,25 @@ AutoCompleteHelper::FixBatchingSupport()
 
   bool config_batch_hint = false;
   if (sig_supports_batch) {
+    enum struct ExplicitBatchHint {
+      UNSET,
+      TRUE,
+      FALSE
+    };
+    // When the rank of an I/O is greater than 0 and the 
+    // model config I/O dimensions has size greater than 
+    // 0, then this is a strong hint at for/against batching.
+    // assume false
+    ExplicitBatchHint config_explicit_hint = ExplicitBatchHint::UNSET;
+
+    // KMTODO: UPDATE COMMENT
     // Checked for early out already so assume batching unless
     // proven otherwise. Need to check
     // to make sure the ambiguous I/Os are defined by the
     // user. If so, then we assume the model can batch.
     // If not, then we have an empty shape which we cannot
     // determine batching support for and turn off batching.
-    config_batch_hint = true;
+    config_batch_hint = false;
     triton::common::TritonJson::Value config_inputs(
         model_state_->ModelConfig(),
         triton::common::TritonJson::ValueType::ARRAY);
@@ -1262,6 +1274,7 @@ AutoCompleteHelper::FixBatchingSupport()
             // Must skip all the dimension checks for rest tensors as
             // the model tensor rank will not be `config rank + 1`.
             using_ragged_batching_ = allow_ragged_batch;
+            config_batch_hint = true;
           } else {
             if (config_io.Find("name")) {
               std::string config_name;
@@ -1280,28 +1293,50 @@ AutoCompleteHelper::FixBatchingSupport()
                   bool model_io_explicit = io->shape_->rank_ > 0;
                   bool user_config_is_defined = config_dims.ArraySize() > 0;
 
-                  if (model_io_explicit && user_config_is_defined) {
-                    if (config_dims.ArraySize() == io->shape_->rank_) {
-                      int64_t first_config_dim = 0;
-                      config_dims.IndexAsInt(0, &first_config_dim);
-                      if (first_config_dim != -1) {
-                        config_batch_hint = false;
-                      }
-                    } else if (
-                        config_dims.ArraySize() - 1 != io->shape_->rank_) {
-                      // Defer error to validation
-                      config_batch_hint = false;
-                    }
-                  } else if (!model_io_explicit && user_config_is_defined) {
-                    int64_t first_config_dim = 0;
-                    config_dims.IndexAsInt(0, &first_config_dim);
-                    if (first_config_dim != -1) {
-                      config_batch_hint = false;
-                    }
-                  } else if (!model_io_explicit && !user_config_is_defined) {
-                    // Defer error to validation
+                  if (!model_io_explicit) {
                     config_batch_hint = false;
-                  }  // else (model_io_explicit && !user_config_is_defined)
+                  } else if (model_io_explicit && !user_config_is_defined) {
+                    config_batch_hint = true;
+                  } else if (model_io_explicit && user_config_is_defined) {
+                    
+                    if (config_dims.ArraySize()-1 == io->shape_->rank_) {
+                      config_batch_hint = true;
+                      
+                      // Check if the model configuration had other I/Os 
+                      // which contradict this one
+                      if (config_explicit_hint == ExplicitBatchHint::UNSET) {
+                        config_explicit_hint = ExplicitBatchHint::TRUE;
+                      } else if (config_explicit_hint == ExplicitBatchHint::FALSE) {
+                        return TRITONSERVER_ErrorNew(
+                          TRITONSERVER_ERROR_INTERNAL,
+                          std::string(
+                              "unable to autofill for '" +
+                              model_state_->Name() +
+                              "', model tensor configurations are "
+                              "contradicting " +
+                              "each other in terms of whether batching is "
+                              "supported").c_str());
+                      }
+                    } else {
+                      config_batch_hint = false;
+                      
+                      // Check if the model configuration had other I/Os 
+                      // which contradict this one
+                      if (config_explicit_hint == ExplicitBatchHint::UNSET) {
+                        config_explicit_hint = ExplicitBatchHint::FALSE;
+                      } else if (config_explicit_hint == ExplicitBatchHint::TRUE) {
+                        return TRITONSERVER_ErrorNew(
+                          TRITONSERVER_ERROR_INTERNAL,
+                          std::string(
+                              "unable to autofill for '" +
+                              model_state_->Name() +
+                              "', model tensor configurations are "
+                              "contradicting " +
+                              "each other in terms of whether batching is "
+                              "supported").c_str());
+                      }
+                    }
+                  }
 
                   break;  // TRITONTF_IOList* itr
                 }
