@@ -1241,7 +1241,6 @@ AutoCompleteHelper::FixBatchingSupport()
     // (i.e. non-batch model with variable size tensors). As 'max_batch_size == 0'
     // from existing config is also ambiguous, it can be either unspecified or
     // no-batch, autofill will check specified input/output (if any) for hint.
-    config_batch_hint = false;
     triton::common::TritonJson::Value config_inputs(
         model_state_->ModelConfig(),
         triton::common::TritonJson::ValueType::ARRAY);
