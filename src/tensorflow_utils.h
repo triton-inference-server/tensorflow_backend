@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020, NVIDIA CORPORATION. All rights reserved.
+// Copyright (c) 2018-2022, NVIDIA CORPORATION. All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions
@@ -30,6 +30,10 @@
 #include "triton/core/tritonserver.h"
 
 namespace triton { namespace backend { namespace tensorflow {
+
+/// \return True if the provided model I/Os allow batching support; False
+/// otherwise.
+bool ModelSupportsBatch(std::vector<const TRITONTF_IOList*> model_ios);
 
 /// \return nullptr if a TensorFlow shape can support a model
 /// configuration shape. Dimensions with variable size in the
