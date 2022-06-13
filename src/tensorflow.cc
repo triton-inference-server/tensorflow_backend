@@ -1523,6 +1523,60 @@ AutoCompleteHelper::FixConfigInputs(const TRITONTF_IOList* reference_list)
     RemoveByName(io->name_, reference_list_copy);
   }
 
+  // Ragged batching can have batch_input which are inputs in the
+  // the model config. Unfortunately these cannot autocomplete,
+  // so just check them off so they're not duplicated.
+  triton::common::TritonJson::Value batch_inputs(
+      model_state_->ModelConfig(),
+      triton::common::TritonJson::ValueType::ARRAY);
+  model_state_->ModelConfig().Find("batch_input", &batch_inputs);
+  for (size_t i = 0; i < batch_inputs.ArraySize(); ++i) {
+    batch_inputs.IndexAsObject(i, &current_io);
+
+    triton::common::TritonJson::Value target_names(
+        model_state_->ModelConfig(),
+        triton::common::TritonJson::ValueType::ARRAY);
+    RETURN_IF_ERROR(current_io.MemberAsArray("target_name", &target_names));
+
+    std::string current_name_str;
+    for (size_t j = 0; j < target_names.ArraySize(); ++j) {
+      target_names.IndexAsString(j, &current_name_str);
+
+      const TRITONTF_IO* io =
+          FindIOByName(reference_list_copy, current_name_str);
+      if (io == nullptr) {
+        continue;
+      }
+
+      RemoveByName(io->name_, reference_list_copy);
+    }
+  }
+
+  // Sequence_batching::control_input cannot be autocompleted, check off the
+  // names the same as ragged batching
+  triton::common::TritonJson::Value sequence_batching;
+  bool found_sequence_batching =
+      model_state_->ModelConfig().Find("sequence_batching", &sequence_batching);
+  if (found_sequence_batching) {
+    triton::common::TritonJson::Value control_inputs(
+        model_state_->ModelConfig(),
+        triton::common::TritonJson::ValueType::ARRAY);
+    sequence_batching.Find("control_input", &control_inputs);
+    for (size_t i = 0; i < control_inputs.ArraySize(); ++i) {
+      control_inputs.IndexAsObject(i, &current_io);
+
+      std::string name;
+      RETURN_IF_ERROR(current_io.MemberAsString("name", &name));
+
+      const TRITONTF_IO* io = FindIOByName(reference_list_copy, name);
+      if (io == nullptr) {
+        continue;
+      }
+
+      RemoveByName(io->name_, reference_list_copy);
+    }
+  }
+
   // Adding configuration from inputs detected in the loaded model
   // but not found in the model configuration.
   for (size_t i = 0; i < reference_list_copy.size(); ++i) {
