@@ -1211,7 +1211,7 @@ AutoCompleteHelper::FixBatchingSupport()
       TRITONTF_ModelOutputs(tritontf_model_.get())};
 
   bool sig_supports_batch = ModelSupportsBatch(model_ios);
-  const int max_batch_size = model_state_->MaxBatchSize();
+  int max_batch_size = model_state_->MaxBatchSize();
 
   // If max-batch-size is explicitly set to non-zero but the model
   // signature doesn't support batching then can't autofill.
