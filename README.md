@@ -197,7 +197,7 @@ the shared libraries needed by the Triton TensorFlow backend. In the
 TensorFlow 1.x or TensorFlow 2.x container you rebuild using:
 
 ```
-$ ./nvbuild.sh
+$ /opt/tensorflow/nvbuild.sh
 ```
 
 After rebuilding within the container you should save the updated
