@@ -1,4 +1,4 @@
-// Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+// Copyright 2019-2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions
@@ -40,7 +40,6 @@
 #include "tensorflow/core/grappler/utils.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/platform/env.h"
-#include "tensorflow/core/platform/tstring.h"
 #include "tensorflow/core/protobuf/meta_graph.pb.h"
 #include "tensorflow/core/protobuf/rewriter_config.pb.h"
 #include "tensorflow/core/public/session.h"
@@ -351,7 +350,7 @@ class TensorImpl {
   size_t ByteSize() const { return nonstring_byte_size_; }
   bool IsGPUTensor() const { return gpu_tensor_; }
 
-  const tensorflow::tstring& String(size_t idx) const;
+  const std::string& String(size_t idx) const;
   void SetString(size_t idx, const std::string& str);
 
  private:
@@ -421,17 +420,17 @@ TensorImpl::Init()
   }
 }
 
-const tensorflow::tstring&
+const std::string&
 TensorImpl::String(size_t idx) const
 {
-  auto flat = tftensor_.flat<tensorflow::tstring>();
+  auto flat = tftensor_.flat<std::string>();
   return flat(idx);
 }
 
 void
 TensorImpl::SetString(size_t idx, const std::string& str)
 {
-  auto flat = tftensor_.flat<tensorflow::tstring>();
+  auto flat = tftensor_.flat<std::string>();
   flat(idx) = str;
 }
 
@@ -461,6 +460,9 @@ class ModelImpl {
       TRITONTF_TensorList* input_tensors,
       const std::vector<std::string>& output_names,
       TRITONTF_TensorList** output_tensors);
+
+  // Run a single operation.
+  TRITONTF_Error* RunOp(const std::string& op_name);
 
  private:
   const std::string model_name_;
@@ -592,6 +594,13 @@ ModelImpl::Run(
     }
   }
 
+  return nullptr;
+}
+
+TRITONTF_Error*
+ModelImpl::RunOp(const std::string& op_name)
+{
+  RETURN_IF_TF_ERROR(session_->Run({}, {}, {op_name}, nullptr));
   return nullptr;
 }
 
@@ -795,7 +804,7 @@ const char*
 TRITONTF_TensorString(TRITONTF_Tensor* tensor, size_t idx, size_t* length)
 {
   TensorImpl* t = reinterpret_cast<TensorImpl*>(tensor);
-  const tensorflow::tstring& str = t->String(idx);
+  const std::string& str = t->String(idx);
   *length = str.length();
   return str.c_str();
 }
@@ -818,7 +827,7 @@ TRITONTF_TensorSetString(
 //
 TRITONTF_Error*
 TRITONTF_ModelCreateFromGraphDef(
-    TRITONTF_Model** trtistf_model, const char* model_name,
+    TRITONTF_Model** tritontf_model, const char* model_name,
     const char* model_path, const int device_id, const int num_intra_threads,
     const int num_inter_threads, const bool use_per_session_threads,
     const bool has_graph_level, const int graph_level,
@@ -893,14 +902,14 @@ TRITONTF_ModelCreateFromGraphDef(
   }
   ModelImpl* model = new ModelImpl(
       model_name, session, potential_inputs, potential_outputs, device_name);
-  *trtistf_model = reinterpret_cast<TRITONTF_Model*>(model);
+  *tritontf_model = reinterpret_cast<TRITONTF_Model*>(model);
 
   return nullptr;
 }
 
 TRITONTF_Error*
 TRITONTF_ModelCreateFromSavedModel(
-    TRITONTF_Model** trtistf_model, const char* model_name,
+    TRITONTF_Model** tritontf_model, const char* model_name,
     const char* model_path, const int device_id, const int num_intra_threads,
     const int num_inter_threads, const bool use_per_session_threads,
     const char* graph_tag, const char* signature_def,
@@ -987,8 +996,8 @@ TRITONTF_ModelCreateFromSavedModel(
       if ((sig_itr->first != INIT_OP_SIGNATURE_DEF_KEY) &&
           (sig_itr->first != TRAIN_OP_SIGNATURE_DEF_KEY)) {
         LOG(WARNING) << "unable to find serving signature '"
-                     << SIGNATURE_DEF_KEY_TO_USE << "', using signature '"
-                     << sig_itr->first << "'";
+                     << SIGNATURE_DEF_KEY_TO_USE;
+        LOG(WARNING) << "using signature '" << sig_itr->first << "'";
         break;
       }
     }
@@ -1064,7 +1073,7 @@ TRITONTF_ModelCreateFromSavedModel(
   }
   ModelImpl* model = new ModelImpl(
       model_name, std::move(bundle), inputs, outputs, device_name);
-  *trtistf_model = reinterpret_cast<TRITONTF_Model*>(model);
+  *tritontf_model = reinterpret_cast<TRITONTF_Model*>(model);
 
   return nullptr;
 }
@@ -1145,4 +1154,20 @@ TRITONTF_ModelRun(
   }
 
   return m->Run(input_tensors, output_tensor_names, output_tensors);
+}
+
+TRITONTF_Error*
+TRITONTF_ModelInitialize(
+    TRITONTF_Model* model, size_t num_init_operations,
+    const char** init_operation_names)
+{
+  ModelImpl* m = reinterpret_cast<ModelImpl*>(model);
+  for (auto i = 0; i < num_init_operations; i++) {
+    TRITONTF_Error* err = m->RunOp(init_operation_names[i]);
+    if (err != nullptr) {
+      return err;
+    }
+  }
+
+  return nullptr;
 }
