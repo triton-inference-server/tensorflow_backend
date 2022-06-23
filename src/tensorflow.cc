@@ -1288,10 +1288,13 @@ AutoCompleteHelper::FixBatchingSupport()
                   bool model_io_explicit = io->shape_->rank_ > 0;
                   bool user_config_is_defined = config_dims.ArraySize() > 0;
 
-                  if (model_io_explicit && !user_config_is_defined) {
+                  if (model_io_explicit && !user_config_is_defined &&
+                      config_explicit_hint == ExplicitBatchHint::UNSET) {
+                    // This is a weaker batch hint than the model config
+                    // explicitly defining dims.
                     config_batch_hint = true;
                   } else if (model_io_explicit && user_config_is_defined) {
-                    if (config_dims.ArraySize() - 1 == io->shape_->rank_) {
+                    if (config_dims.ArraySize() == io->shape_->rank_ - 1) {
                       config_batch_hint = true;
 
                       // Check if the model configuration had other I/Os
@@ -1316,6 +1319,7 @@ AutoCompleteHelper::FixBatchingSupport()
                       // which contradict this one
                       if (config_explicit_hint == ExplicitBatchHint::UNSET) {
                         config_explicit_hint = ExplicitBatchHint::FALSE;
+                        config_batch_hint = false;
                       } else if (
                           config_explicit_hint == ExplicitBatchHint::TRUE) {
                         return TRITONSERVER_ErrorNew(
