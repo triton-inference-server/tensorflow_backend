@@ -994,7 +994,18 @@ ModelState::CreateModel(
   }
 
   if (!init_ops_file_.empty()) {
-    std::string init_ops_path = JoinPath({RepositoryPath(), init_ops_file_});
+    std::string init_ops_path;
+    // We first check whether the file exists in the model version folder. If it
+    // doesn't exist, we will check the model directory.
+    init_ops_path =
+        JoinPath({RepositoryPath(), std::to_string(Version()), init_ops_file_});
+
+    bool exists = false;
+    FileExists(init_ops_path, &exists);
+    if (!exists) {
+      init_ops_path = JoinPath({RepositoryPath(), init_ops_file_});
+    }
+
     std::string json_contents;
     RETURN_IF_ERROR(ReadTextFile(init_ops_path, &json_contents));
     triton::common::TritonJson::Value init_ops_json;
