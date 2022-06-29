@@ -221,15 +221,17 @@ Configuration of Tensorflow for a model is done through the Parameters section o
 * `TF_INIT_OPS_FILE`: This parameter specifies the name of the file in JSON
 format that contains the [initialization operations](https://www.tensorflow.org/api_docs/python/tf/compat/v1/global_variables_initializer).
 The JSON file must have a single element named 'init_ops' which describes the
-list of initialization operations.
-This file must be stored in the model directory. The model directory structure
-should look like below:
+list of initialization operations. This file can be stored in the model version
+folder or in the model directory. If it is provided in both locations, the model
+version folder takes precedence over the one provided in the model folder. If it
+is provided in the model version folder, the directory structure should look
+like below:
 
 ```
 |-- 1
-|   `-- model.graphdef
-|-- config.pbtxt
-`-- init_ops.json
+|   |-- model.graphdef
+|   `-- init_ops.json
+`-- config.pbtxt
 ```
 
 Below is an example of the contents of the `init_ops.json` file.
