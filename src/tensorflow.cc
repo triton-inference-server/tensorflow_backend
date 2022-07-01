@@ -2105,6 +2105,26 @@ ModelInstanceState::ProcessRequests(
         }
         // Use the responder for non-STRING datatype...
         else {  // datatype != DataType::TYPE_STRING
+
+          // Calculate the number of elements corresponding to batchn_shape,
+          // compare with the actual number of elements, verify batchn_shape,
+          // and solve the case where the tensor rank value is 0 or unknown rank
+          size_t element_size = 0,actual_element_size = 0;
+          size_t byte_size = TRITONTF_TensorDataByteSize(output_tensor);
+          size_t type_size = TRITONSERVER_DataTypeByteSize(datatype);
+          actual_element_size = byte_size/type_size;
+          if(!batchn_shape.empty()){
+            element_size = 1;
+            for(size_t itr = 0;itr < batchn_shape.size();itr ++ ){
+              element_size*=batchn_shape[itr];
+            }
+          }
+          if(element_size != actual_element_size){
+            batchn_shape.clear();
+            batchn_shape.reserve(1);
+            batchn_shape.push_back(actual_element_size);
+          }
+
           responder.ProcessTensor(
               name, datatype, batchn_shape, TRITONTF_TensorData(output_tensor),
               (TRITONTF_TensorIsGPUTensor(output_tensor))
