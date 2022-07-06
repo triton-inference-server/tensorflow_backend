@@ -33,7 +33,7 @@ project(tritontensorflowbackend LANGUAGES C CXX)
 #
 option(TRITON_ENABLE_GPU "Enable GPU support in backend." ON)
 option(TRITON_ENABLE_STATS "Include statistics collections in backend." ON)
-set(TRITON_TENSORFLOW_VERSION "1" CACHE STRING "TensorFlow version, must be '1' or '2'.")
+set(TRITON_TENSORFLOW_VERSION "2" CACHE STRING "TensorFlow version, must be '1' or '2'.")
 set(TRITON_TENSORFLOW_DOCKER_IMAGE "" CACHE STRING "Docker image containing the TensorFlow build required by backend.")
 option(TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS "Install extra dependencies directly into the TensorFlow backend, instead of assuming they are present on the system." OFF)
 set(TRITON_TENSORFLOW_LIB_PATHS "" CACHE PATH "Paths to TensorFlow libraries. Multiple paths may be specified by separating them with a semicolon.")

@@ -173,7 +173,7 @@ GPU memory.
 ##### --backend-config=tensorflow,version=\<int\>
 
 Select the version of the TensorFlow library to be used, available
-versions are 1 and 2. Default version is 1.
+versions are 1 and 2. Default version is 2.
 
 ##### --backend-config=tensorflow,default-max-batch-size=\<int\>
 
