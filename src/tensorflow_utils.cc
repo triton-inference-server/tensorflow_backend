@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020, NVIDIA CORPORATION. All rights reserved.
+// Copyright (c) 2018-2022, NVIDIA CORPORATION. All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions
@@ -29,6 +29,21 @@
 #include "triton/backend/backend_common.h"
 
 namespace triton { namespace backend { namespace tensorflow {
+
+bool
+ModelSupportsBatch(std::vector<const TRITONTF_IOList*> model_ios)
+{
+  for (const auto& ios : model_ios) {
+    for (const TRITONTF_IOList* itr = ios; itr != nullptr; itr = itr->next_) {
+      TRITONTF_IO* io = itr->io_;
+      if ((io->shape_->rank_) != 0 && (io->shape_->dims_[0] != -1)) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
 
 TRITONSERVER_Error*
 CompareDims(
@@ -118,6 +133,18 @@ FindIOByName(const TRITONTF_IOList* ios, const std::string& name)
   return nullptr;
 }
 
+const TRITONTF_IO*
+FindIOByName(const std::vector<const TRITONTF_IOList*> ios, std::string& name)
+{
+  for (const auto itr : ios) {
+    if (itr->io_->name_ == name) {
+      return itr->io_;
+    }
+  }
+
+  return nullptr;
+}
+
 std::string
 ShapeToString(const TRITONTF_Shape* shape, const size_t start_idx)
 {
@@ -143,6 +170,13 @@ CompareDataType(TRITONTF_DataType model_dtype, const std::string& dtype)
   }
 
   return model_dtype == cdtype;
+}
+
+bool
+DataTypeIsInvalid(const std::string& dtype)
+{
+  auto cdtype = ConvertDataType(dtype);
+  return cdtype == TRITONTF_TYPE_INVALID;
 }
 
 TRITONSERVER_DataType
