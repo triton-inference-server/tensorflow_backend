@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2020, NVIDIA CORPORATION. All rights reserved.
+// Copyright 2019-2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions
@@ -274,6 +274,11 @@ TRITONTF_EXPORT TRITONTF_Error* TRITONTF_ModelRun(
     TRITONTF_Model* model, TRITONTF_TensorList* input_tensors,
     size_t num_outputs, const char** output_names,
     TRITONTF_TensorList** output_tensors);
+
+// Initialize all the operations that do require initialization.
+TRITONTF_EXPORT TRITONTF_Error* TRITONTF_ModelInitialize(
+    TRITONTF_Model* model, size_t num_init_operations,
+    const char** init_operation_names);
 
 #ifdef __cplusplus
 }  // extern "C"

@@ -256,40 +256,66 @@ Configuration of Tensorflow for a model is done through the Parameters section o
 * `TF_GRAPH_TAG`: Tag of the graphs to use. See [protobuf here](https://github.com/tensorflow/tensorflow/blob/6f72753a66d6abab8b839cc263a9f1329861f6f9/tensorflow/core/protobuf/meta_graph.proto#L56)
 * `TF_SIGNATURE_DEF`: Signature def to use. See [protobuf here](https://github.com/tensorflow/tensorflow/blob/6f72753a66d6abab8b839cc263a9f1329861f6f9/tensorflow/core/protobuf/meta_graph.proto#L260-L331)
 * `MAX_SESSION_SHARE_COUNT`: This parameter specifies the maximum number of [model instances](https://github.com/triton-inference-server/server/blob/main/docs/model_configuration.md#instance-groups) that can share a [TF session](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/core/public/session.h). The default value is 1 which means Triton will create a separate TF session for each model instance. If this parameter is set to the total number of instances, then Triton will create only a single TF session which will be shared by all the instances. Sharing TF sessions among model instances can reduce memory footprint of loading and executing the model.
+* `TF_INIT_OPS_FILE`: This parameter specifies the name of the file in JSON
+format that contains the [initialization operations](https://www.tensorflow.org/api_docs/python/tf/compat/v1/global_variables_initializer).
+The JSON file must have a single element named 'init_ops' which describes the
+list of initialization operations. This file can be stored in the model version
+folder or in the model directory. If it is provided in both locations, the model
+version folder takes precedence over the one provided in the model folder. If it
+is provided in the model version folder, the directory structure should look
+like below:
+
+```
+|-- 1
+|   |-- model.graphdef
+|   `-- init_ops.json
+`-- config.pbtxt
+```
+
+Below is an example of the contents of the `init_ops.json` file.
+
+```json
+{
+    "init_ops": ["init"]
+}
+```
 
 
 The section of model config file specifying these parameters will look like:
 
 ```
-.
-.
-.
 parameters: {
-key: "TF_NUM_INTRA_THREADS"
-value: {
-string_value:"2"
+  key: "TF_NUM_INTRA_THREADS"
+  value: {
+    string_value:"2"
+  }
 }
-}
-parameters: {
-key: "TF_USE_PER_SESSION_THREADS"
-value: {
-string_value:"yes"
-}
-}
-parameters: {
-key: "TF_GRAPH_TAG"
-value: {
-string_value: "serve1"
-}
-}
-parameters: {
-key: "TF_SIGNATURE_DEF"
-value: {
-string_value: "serving2"
-}
-}
-.
-.
-.
 
+parameters: {
+  key: "TF_USE_PER_SESSION_THREADS"
+  value: {
+    string_value:"yes"
+  }
+}
+
+parameters: {
+  key: "TF_GRAPH_TAG"
+  value: {
+    string_value: "serve1"
+  }
+}
+
+parameters: {
+  key: "TF_INIT_OPS_FILE"
+  value: {
+    string_value: "init_ops.json"
+  }
+}
+
+parameters: {
+  key: "TF_SIGNATURE_DEF"
+  value: {
+    string_value: "serving2"
+  }
+}
 ```
