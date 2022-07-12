@@ -743,8 +743,9 @@ class ModelState : public BackendModel {
   int NumIntraThreads() const { return num_intra_threads_; }
   int NumInterThreads() const { return num_inter_threads_; }
   int UsePerSessionThreads() const { return use_per_session_threads_; }
-  std::string GraphTag() const { return graph_tag_; }
-  std::string SignatureDef() const { return signature_def_; }
+  const std::string& GraphTag() const { return graph_tag_; }
+  const std::string& SignatureDef() const { return signature_def_; }
+  const std::string& InitOpsFile() const { return init_ops_file_; }
 
  private:
   TRITONSERVER_Error* CreateModel(
@@ -770,6 +771,7 @@ class ModelState : public BackendModel {
   bool use_per_session_threads_;
   std::string graph_tag_;
   std::string signature_def_;
+  std::string init_ops_file_;
 };
 
 TRITONSERVER_Error*
@@ -990,6 +992,37 @@ ModelState::CreateModel(
         config_inputs.ArraySize(), output_names.data(), output_types.data(),
         config_outputs.ArraySize()));
   }
+
+  if (!init_ops_file_.empty()) {
+    std::string init_ops_path;
+    // We first check whether the file exists in the model version folder. If it
+    // doesn't exist, we will check the model directory.
+    init_ops_path =
+        JoinPath({RepositoryPath(), std::to_string(Version()), init_ops_file_});
+
+    bool exists = false;
+    FileExists(init_ops_path, &exists);
+    if (!exists) {
+      init_ops_path = JoinPath({RepositoryPath(), init_ops_file_});
+    }
+
+    std::string json_contents;
+    RETURN_IF_ERROR(ReadTextFile(init_ops_path, &json_contents));
+    triton::common::TritonJson::Value init_ops_json;
+    RETURN_IF_ERROR(init_ops_json.Parse(json_contents));
+    std::vector<const char*> init_ops;
+    std::deque<std::string> init_ops_str;
+
+    triton::common::TritonJson::Value init_ops_array;
+    RETURN_IF_ERROR(init_ops_json.MemberAsArray("init_ops", &init_ops_array));
+    for (size_t i = 0; i < init_ops_array.ArraySize(); i++) {
+      init_ops_str.emplace_back();
+      RETURN_IF_ERROR(init_ops_array.IndexAsString(i, &init_ops_str.back()));
+      init_ops.push_back(init_ops_str.back().c_str());
+    }
+    RETURN_IF_TRITONTF_ERROR(TRITONTF_ModelInitialize(
+        lmodel.tritontf_model_.get(), init_ops.size(), init_ops.data()));
+  }
   *model = std::move(lmodel);
   return nullptr;
 }
@@ -1127,6 +1160,15 @@ ModelState::ParseParameters()
     }
 
     err = ParseParameter(params, "TF_SIGNATURE_DEF", &signature_def_);
+    if (err != nullptr) {
+      if (TRITONSERVER_ErrorCode(err) != TRITONSERVER_ERROR_NOT_FOUND) {
+        return err;
+      } else {
+        TRITONSERVER_ErrorDelete(err);
+      }
+    }
+
+    err = ParseParameter(params, "TF_INIT_OPS_FILE", &init_ops_file_);
     if (err != nullptr) {
       if (TRITONSERVER_ErrorCode(err) != TRITONSERVER_ERROR_NOT_FOUND) {
         return err;
