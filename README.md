@@ -134,7 +134,32 @@ The default value to use for max_batch_size during [auto-completing model config
 when batching support is detected in the model. Assuming Triton was not launched
 with`--disable-auto-complete-config` command-line option, the tensorflow backend
 will set the max_batch_size of the model to this default value under the following
-conditions:
+
+## Autocomplete
+
+Omitting the `--disable-auto-complete-config` command line option, the Tensorflow 
+Backend makes use of the provided savedmodel configuration as hints to complete the 
+rest of of the model's configuration. Graphdef models are not autocompleted as they 
+do not have enough information to fill in missing configurations.
+
+### max_batch_size
+
+Follows the same rules as [default-max-batch-size](#--backend-config=tensorflow,default-max-batch-size=\<int\>) but has higher precedence.
+
+### Inputs and Outputs
+
+The Tensorflow Backend is able to fill in the `name`, `data_type`, and `dims` provided this
+this information is provided in the model. Known limitations are inputs which are defined in 
+the [`ragged_batching`](https://github.com/triton-inference-server/server/blob/main/docs/ragged_batching.md#batch-input) and
+[`sequence_batching`](https://github.com/triton-inference-server/server/blob/main/docs/model_configuration.md#sequence-batcher) fields. 
+There is not enough information in the model for the tensorflow backend to be able to autocomplete these.
+
+Autocompleting outputs follows the following rules:
+- If `outputs` is empty or undefined in the model configuration, all outputs in the savedmodel 
+will be autocompleted
+- If one or more output is defined in `outputs`, those outputs which are defined will be 
+autocompleted and those which are omitted will be ignored.
+
 
 1. Autocomplete has determined the model is capable of batching requests. 
 2. max_batch_size is 0 in the model configuration or max_batch_size 
