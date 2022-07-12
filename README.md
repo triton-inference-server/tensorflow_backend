@@ -131,9 +131,9 @@ versions are 1 and 2. Default version is 1.
 ##### --backend-config=tensorflow,default-max-batch-size=\<int\>
 
 The default value to use for max_batch_size during [auto-completing model configuration](https://github.com/triton-inference-server/server/blob/main/docs/model_configuration.md#auto-generated-model-configuration)
-when batching support is detected in the model. If the `--strict-model-config=false`
-command-line option is used, the tensorflow backend will set the
-max_batch_size of the model to this default value under the following 
+when batching support is detected in the model. Assuming Triton was not launched
+with`--disable-auto-complete-config` command-line option, the tensorflow backend
+will set the max_batch_size of the model to this default value under the following
 conditions:
 
 1. Autocomplete has determined the model is capable of batching requests. 
