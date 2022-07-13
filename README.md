@@ -115,7 +115,7 @@ learn more about Triton's support for auto-completing model configuration from
 [here](https://github.com/triton-inference-server/server/blob/main/docs/model_configuration.md#auto-generated-model-configuration).
 
 However, in Graphdef format, models do not carry sufficient metadata and hence
-Triton can not generate model configuration for them. As a result, config.pbtxt
+Triton cannot generate model configuration for them. As a result, config.pbtxt
 must be provided for such models explicitly.
 
 Tensorflow backend can complete the following fields in model configuration:
