@@ -130,12 +130,13 @@ Auto-completing max_batch_size follows the following rules:
 
 If the above two rules are met, max_batch_size is set to
 [default-max-batch-size](#--backend-config=tensorflow,default-max-batch-size=\<int\>).
+Otherwise max_batch_size is set as 0.
 
 
 ### Inputs and Outputs
 
 The Tensorflow Backend is able to fill in the `name`, `data_type`, and `dims` provided this
-information is provided in the model. Known limitations are inputs which are defined in
+information is available in the model. Known limitations are inputs which are defined in
 the [`ragged_batching`](https://github.com/triton-inference-server/server/blob/main/docs/ragged_batching.md#batch-input) and
 [`sequence_batching`](https://github.com/triton-inference-server/server/blob/main/docs/model_configuration.md#sequence-batcher)
 fields. There is not enough information in the model for the backend to be able to autocomplete these.
