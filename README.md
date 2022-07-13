@@ -140,6 +140,7 @@ information is available in the model. Known limitations are inputs which are de
 the [`ragged_batching`](https://github.com/triton-inference-server/server/blob/main/docs/ragged_batching.md#batch-input) and
 [`sequence_batching`](https://github.com/triton-inference-server/server/blob/main/docs/model_configuration.md#sequence-batcher)
 fields. There is not enough information in the model for the backend to be able to autocomplete these.
+Addditionally, the backend cannot auto complete configuration for scalar tensors.
 
 Autocompleting outputs follows the following rules:
 - If `outputs` is empty or undefined in the model configuration, all outputs in the savedmodel 
