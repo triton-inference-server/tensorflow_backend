@@ -106,6 +106,53 @@ to allocate more memory for its executions than what's allowed.
 you can also use the [rate limiter](https://github.com/triton-inference-server/server/blob/main/docs/rate_limiter.md)
 in Triton to limit the number of requests allowed to enter execution.
 
+## Auto-Complete Model Configuration
+
+Assuming Triton was not started with `--disable-auto-complete-config` command line
+option, the Tensorflow Backend makes use of the metadata available in TensorFlow
+SavedModel to populate the required fields in the model's config.pbtxt. You can
+learn more about Triton's support for auto-completing model configuration from
+[here](https://github.com/triton-inference-server/server/blob/main/docs/model_configuration.md#auto-generated-model-configuration).
+
+However, in Graphdef format, models do not carry sufficient metadata and hence
+Triton cannot generate model configuration for them. As a result, config.pbtxt
+must be provided for such models explicitly.
+
+Tensorflow backend can complete the following fields in model configuration:
+
+### max_batch_size
+
+Auto-completing max_batch_size follows the following rules:
+
+1. Autocomplete has determined the model is capable of batching requests.
+2. max_batch_size is 0 in the model configuration or max_batch_size
+   is omitted from the model configuration.
+
+If the above two rules are met, max_batch_size is set to
+[default-max-batch-size](#--backend-config=tensorflow,default-max-batch-size=\<int\>).
+Otherwise max_batch_size is set as 0.
+
+
+### Inputs and Outputs
+
+The Tensorflow Backend is able to fill in the `name`, `data_type`, and `dims` provided this
+information is available in the model. Known limitations are inputs which are defined in
+the [`ragged_batching`](https://github.com/triton-inference-server/server/blob/main/docs/ragged_batching.md#batch-input) and
+[`sequence_batching`](https://github.com/triton-inference-server/server/blob/main/docs/model_configuration.md#sequence-batcher)
+fields. There is not enough information in the model for the backend to be able to autocomplete these.
+Additionally, the backend cannot auto complete configuration for scalar tensors.
+
+Autocompleting outputs follows the following rules:
+- If `outputs` is empty or undefined in the model configuration, all outputs in the savedmodel 
+will be autocompleted
+- If one or more output is defined in `outputs`, those outputs which are defined will be
+autocompleted and those which are omitted will be ignored.
+
+### Dynamic Batching
+
+If max_batch_size > 1 and no [scheduler](https://github.com/triton-inference-server/server/blob/main/docs/model_configuration.md#scheduling-and-batching)
+is provided, the dynamic batch scheduler will be enabled with default settings.
+
 ## Command-line Options
 
 The command-line options configure properties of the TensorFlow
@@ -131,17 +178,8 @@ versions are 1 and 2. Default version is 1.
 ##### --backend-config=tensorflow,default-max-batch-size=\<int\>
 
 The default value to use for max_batch_size during [auto-completing model configuration](https://github.com/triton-inference-server/server/blob/main/docs/model_configuration.md#auto-generated-model-configuration)
-when batching support is detected in the model. If the `--strict-model-config=false`
-command-line option is used, the tensorflow backend will set the
-max_batch_size of the model to this default value under the following 
-conditions:
-
-1. Autocomplete has determined the model is capable of batching requests. 
-2. max_batch_size is 0 in the model configuration or max_batch_size 
-   is omitted from the model configuration.
-
-If max_batch_size > 1 and no [scheduler](https://github.com/triton-inference-server/server/blob/main/docs/model_configuration.md#scheduling-and-batching) 
-is provided, the dynamic batch scheduler will be enabled.
+when batching support is detected in the model. Note that if not
+explicitly provided, the default value for this option is 4.
 
 ## Build the TensorFlow Backend
 
