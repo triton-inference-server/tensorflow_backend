@@ -1013,7 +1013,6 @@ ModelState::Create(TRITONBACKEND_Model* triton_model, ModelState** state)
       triton_model, &auto_complete_config));
   if (auto_complete_config) {
     RETURN_IF_ERROR((*state)->AutoCompleteConfig());
-    RETURN_IF_ERROR((*state)->SetModelConfig());
   }
 
   RETURN_IF_ERROR((*state)->ValidateModelConfig());
@@ -1731,6 +1730,7 @@ ModelState::AutoCompleteConfig()
 
     auto ach = AutoCompleteHelper(this, tritontf_model);
     RETURN_IF_ERROR(ach.Fix());
+    RETURN_IF_ERROR(SetModelConfig());
   }
 
   return nullptr;  // success
