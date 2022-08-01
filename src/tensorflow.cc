@@ -1253,7 +1253,8 @@ AutoCompleteHelper::FixBatchingSupport()
 
           bool allow_ragged_batch = false;
           if (config_io.Find("allow_ragged_batch", &allow_ragged_batch_json)) {
-            allow_ragged_batch_json.AsBool(&allow_ragged_batch);
+            RETURN_IF_ERROR(
+                allow_ragged_batch_json.AsBool(&allow_ragged_batch));
           }
           if (allow_ragged_batch) {
             // Treat the presence of tensor allowing ragged batch as
@@ -1269,9 +1270,9 @@ AutoCompleteHelper::FixBatchingSupport()
               triton::common::TritonJson::Value config_dims;
               common::TritonJson::Value reshape;
               if (config_io.Find("reshape", &reshape)) {
-                reshape.MemberAsArray("shape", &config_dims);
+                RETURN_IF_ERROR(reshape.MemberAsArray("shape", &config_dims));
               } else {
-                config_io.MemberAsArray("dims", &config_dims);
+                RETURN_IF_ERROR(config_io.MemberAsArray("dims", &config_dims));
               }
               for (const TRITONTF_IOList* itr = model_ios[ios_idx];
                    itr != nullptr; itr = itr->next_) {
@@ -1383,8 +1384,8 @@ AutoCompleteHelper::FixBatchingSupport()
       triton::common::TritonJson::Value dynamic_batching(
           model_state_->ModelConfig(),
           triton::common::TritonJson::ValueType::OBJECT);
-      model_state_->ModelConfig().Add(
-          "dynamic_batching", std::move(dynamic_batching));
+      RETURN_IF_ERROR(model_state_->ModelConfig().Add(
+          "dynamic_batching", std::move(dynamic_batching)));
     }
   }
 
@@ -1411,17 +1412,19 @@ AutoCompleteHelper::FillMissingValues(
   // If this I/O is empty then we are using the model
   // to autocomplete.
   if (is_empty_io) {
-    io_config.SetStringObject("name", io->name_);
+    RETURN_IF_ERROR(io_config.SetStringObject("name", io->name_));
   }
 
   bool found_config_data_type = io_config.Find("data_type", &tmp);
   std::string data_type_str;
-  tmp.AsString(&data_type_str);
+  if (found_config_data_type) {
+    RETURN_IF_ERROR(tmp.AsString(&data_type_str));
+  }
   bool should_auto_complete_data_type =
       !found_config_data_type || DataTypeIsInvalid(data_type_str);
   if (should_auto_complete_data_type) {
-    io_config.SetStringObject(
-        "data_type", ConvertToModelConfigString(io->data_type_));
+    RETURN_IF_ERROR(io_config.SetStringObject(
+        "data_type", ConvertToModelConfigString(io->data_type_)));
   }
 
   bool found_dims = io_config.Find("dims", &tmp);
@@ -1507,7 +1510,7 @@ AutoCompleteHelper::FixConfigInputs(const TRITONTF_IOList* reference_list)
       model_state_->ModelConfig(),
       triton::common::TritonJson::ValueType::OBJECT);
   for (size_t i = 0; i < ios.ArraySize(); ++i) {
-    ios.IndexAsObject(i, &current_io);
+    RETURN_IF_ERROR(ios.IndexAsObject(i, &current_io));
 
     triton::common::TritonJson::Value current_name(
         model_state_->ModelConfig(),
@@ -1533,7 +1536,7 @@ AutoCompleteHelper::FixConfigInputs(const TRITONTF_IOList* reference_list)
       triton::common::TritonJson::ValueType::ARRAY);
   model_state_->ModelConfig().Find("batch_input", &batch_inputs);
   for (size_t i = 0; i < batch_inputs.ArraySize(); ++i) {
-    batch_inputs.IndexAsObject(i, &current_io);
+    RETURN_IF_ERROR(batch_inputs.IndexAsObject(i, &current_io));
 
     triton::common::TritonJson::Value target_names(
         model_state_->ModelConfig(),
@@ -1542,7 +1545,7 @@ AutoCompleteHelper::FixConfigInputs(const TRITONTF_IOList* reference_list)
 
     std::string current_name_str;
     for (size_t j = 0; j < target_names.ArraySize(); ++j) {
-      target_names.IndexAsString(j, &current_name_str);
+      RETURN_IF_ERROR(target_names.IndexAsString(j, &current_name_str));
 
       const TRITONTF_IO* io =
           FindIOByName(reference_list_copy, current_name_str);
@@ -1565,7 +1568,7 @@ AutoCompleteHelper::FixConfigInputs(const TRITONTF_IOList* reference_list)
         triton::common::TritonJson::ValueType::ARRAY);
     sequence_batching.Find("control_input", &control_inputs);
     for (size_t i = 0; i < control_inputs.ArraySize(); ++i) {
-      control_inputs.IndexAsObject(i, &current_io);
+      RETURN_IF_ERROR(control_inputs.IndexAsObject(i, &current_io));
 
       std::string name;
       RETURN_IF_ERROR(current_io.MemberAsString("name", &name));
@@ -1591,7 +1594,7 @@ AutoCompleteHelper::FixConfigInputs(const TRITONTF_IOList* reference_list)
 
     RETURN_IF_ERROR(FillMissingValues(io, blank_value));
 
-    ios.Append(std::move(blank_value));
+    RETURN_IF_ERROR(ios.Append(std::move(blank_value)));
   }
   reference_list_copy.clear();
 
@@ -1657,7 +1660,8 @@ AutoCompleteHelper::FixConfigOutputs(const TRITONTF_IOList* reference_list)
     if (found_ios) {
       ios.Swap(auto_complete_ios);
     } else {
-      model_state_->ModelConfig().Add("output", std::move(auto_complete_ios));
+      RETURN_IF_ERROR(model_state_->ModelConfig().Add(
+          "output", std::move(auto_complete_ios)));
     }
   } else {
     // Outputs not specified in the configuration will be ignored; hence,
@@ -1666,7 +1670,7 @@ AutoCompleteHelper::FixConfigOutputs(const TRITONTF_IOList* reference_list)
         model_state_->ModelConfig(),
         triton::common::TritonJson::ValueType::OBJECT);
     for (size_t i = 0; i < ios.ArraySize(); ++i) {
-      ios.IndexAsObject(i, &current_io);
+      RETURN_IF_ERROR(ios.IndexAsObject(i, &current_io));
 
       std::string output_name;
       RETURN_IF_ERROR(current_io.MemberAsString("name", &output_name));
@@ -1692,8 +1696,11 @@ ModelState::AutoCompleteConfig()
     // Attempt to auto-complete the config with first loaded model file.
     // 'default_model_filename' is the first model file to try.
     std::string default_model_filename;
-    ModelConfig().MemberAsString(
-        "default_model_filename", &default_model_filename);
+    if (ModelConfig().Find("default_model_filename")) {
+      RETURN_IF_ERROR(ModelConfig().MemberAsString(
+          "default_model_filename", &default_model_filename));
+    }
+
     if (default_model_filename.empty()) {
       default_model_filename = "model.savedmodel";
     }
