@@ -1696,10 +1696,8 @@ ModelState::AutoCompleteConfig()
     // Attempt to auto-complete the config with first loaded model file.
     // 'default_model_filename' is the first model file to try.
     std::string default_model_filename;
-    if (ModelConfig().Find("default_model_filename")) {
-      RETURN_IF_ERROR(ModelConfig().MemberAsString(
-          "default_model_filename", &default_model_filename));
-    }
+    RETURN_IF_ERROR(ModelConfig().MemberAsString(
+        "default_model_filename", &default_model_filename));
 
     if (default_model_filename.empty()) {
       default_model_filename = "model.savedmodel";
