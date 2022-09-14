@@ -26,6 +26,7 @@
 
 #include "triton/tensorflow_backend_tf.h"
 
+#include "tensorflow/c/c_api.h"
 #include "tensorflow/cc/saved_model/loader.h"
 #include "tensorflow/cc/saved_model/tag_constants.h"
 #include "tensorflow/core/common_runtime/device.h"
@@ -1169,5 +1170,14 @@ TRITONTF_ModelInitialize(
     }
   }
 
+  return nullptr;
+}
+
+TRITONTF_Error*
+TRITONTF_LoadAndRegisterLibrary(const char* path)
+{
+  const tensorflow::Status status = TF_NewStatus();
+  TF_Library* lib = TF_LoadLibrary(path, status);
+  RETURN_IF_TF_ERROR(status);
   return nullptr;
 }
