@@ -1176,8 +1176,13 @@ TRITONTF_ModelInitialize(
 TRITONTF_Error*
 TRITONTF_LoadAndRegisterLibrary(const char* path)
 {
-  const tensorflow::Status status = TF_NewStatus();
+  TF_Status* status = TF_NewStatus();
   TF_Library* lib = TF_LoadLibrary(path, status);
-  RETURN_IF_TF_ERROR(status);
+  TF_Code status_code = TF_GetCode(status);
+  std::string status_msg(TF_Message(status));
+  TF_DeleteStatus(status);
+  if (status_code != TF_OK) {
+    return TRITONTF_ErrorNew(status_msg);
+  }
   return nullptr;
 }

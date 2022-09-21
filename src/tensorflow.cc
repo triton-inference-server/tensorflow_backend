@@ -1197,7 +1197,6 @@ ModelState::ParseLibraries()
         std::string op_filename;
         RETURN_IF_ERROR(
             op_library_filenames.IndexAsString(op_idx, &op_filename));
-        // TODO: Relative path?
         RETURN_IF_TRITONTF_ERROR(
             TRITONTF_LoadAndRegisterLibrary(op_filename.c_str()));
       }
