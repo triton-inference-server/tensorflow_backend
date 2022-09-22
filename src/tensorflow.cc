@@ -1043,6 +1043,9 @@ ModelState::Create(TRITONBACKEND_Model* triton_model, ModelState** state)
     RETURN_IF_ERROR(ex.err_);
   }
 
+  // If libraries were provided with the config, register them.
+  RETURN_IF_ERROR((*state)->ParseLibraries());
+
   // Auto-complete the configuration if requested...
   bool auto_complete_config = false;
   RETURN_IF_ERROR(TRITONBACKEND_ModelAutoCompleteConfig(
@@ -1053,7 +1056,6 @@ ModelState::Create(TRITONBACKEND_Model* triton_model, ModelState** state)
 
   RETURN_IF_ERROR((*state)->ValidateModelConfig());
   RETURN_IF_ERROR((*state)->ParseParameters());
-  RETURN_IF_ERROR((*state)->ParseLibraries());
 
   return nullptr;  // success
 }
