@@ -1184,5 +1184,6 @@ TRITONTF_LoadAndRegisterLibrary(const char* path)
   if (status_code != TF_OK) {
     return TRITONTF_ErrorNew(status_msg);
   }
+  
   return nullptr;
 }
