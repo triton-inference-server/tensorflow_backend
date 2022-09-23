@@ -1200,7 +1200,7 @@ ModelState::ParseLibraries()
         std::string op_filename;
         RETURN_IF_ERROR(
             op_library_filenames.IndexAsString(op_idx, &op_filename));
-        LOG_MESSAGE(TRITONSERVER_LOG_ERROR, ((std::string("Registering plugin: ") + op_filename + std::endl).c_str()));
+        LOG_MESSAGE(TRITONSERVER_LOG_ERROR, ((std::string("Registering plugin: ") + op_filename).c_str()));
         RETURN_IF_TRITONTF_ERROR(
             TRITONTF_LoadAndRegisterLibrary(op_filename.c_str()));
       }
