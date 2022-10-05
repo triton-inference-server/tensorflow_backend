@@ -758,8 +758,8 @@ class ModelState : public BackendModel {
   // Parses and validates parameters in config
   TRITONSERVER_Error* ParseParameters();
 
-  // Parses and validates op libraries in config
-  TRITONSERVER_Error* ParseLibraries();
+  // Parses and registers op libraries in config
+  TRITONSERVER_Error* ParseAndRegisterLibraries();
 
   // Validate that model configuration is supported by this backend.
   TRITONSERVER_Error* ValidateModelConfig();
@@ -1044,7 +1044,7 @@ ModelState::Create(TRITONBACKEND_Model* triton_model, ModelState** state)
   }
 
   // If libraries were provided with the config, register them.
-  RETURN_IF_ERROR((*state)->ParseLibraries());
+  RETURN_IF_ERROR((*state)->ParseAndRegisterLibraries());
 
   // Auto-complete the configuration if requested...
   bool auto_complete_config = false;
@@ -1187,7 +1187,7 @@ ModelState::ParseParameters()
 }
 
 TRITONSERVER_Error*
-ModelState::ParseLibraries()
+ModelState::ParseAndRegisterLibraries()
 {
   // Register all op libraries that contain custom operations.
   triton::common::TritonJson::Value model_ops;
