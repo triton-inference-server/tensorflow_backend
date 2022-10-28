@@ -1763,21 +1763,21 @@ ModelState::AutoCompleteConfig()
           backend_config_->allow_soft_placement_,
           backend_config_->memory_limit_mb_, nullptr /* tftrt_config */,
           false /* auto_mixed precision */);
-    }
 
-    if (err != nullptr) {
-      std::string msg((err->msg_ == nullptr) ? "<unknown>" : err->msg_);
-      TRITONTF_ErrorDelete(err);
-      return TRITONSERVER_ErrorNew(
-          TRITONSERVER_ERROR_INTERNAL,
-          (std::string("unable to auto-complete model configuration for '") +
-           Name() + "', failed to load model: " + msg)
-              .c_str());
-    }
+      if (err != nullptr) {
+        std::string msg((err->msg_ == nullptr) ? "<unknown>" : err->msg_);
+        TRITONTF_ErrorDelete(err);
+        return TRITONSERVER_ErrorNew(
+            TRITONSERVER_ERROR_INTERNAL,
+            (std::string("unable to auto-complete model configuration for '") +
+             Name() + "', failed to load model: " + msg)
+                .c_str());
+      }
 
-    auto ach = AutoCompleteHelper(this, tritontf_model);
-    RETURN_IF_ERROR(ach.Fix());
-    RETURN_IF_ERROR(SetModelConfig());
+      auto ach = AutoCompleteHelper(this, tritontf_model);
+      RETURN_IF_ERROR(ach.Fix());
+      RETURN_IF_ERROR(SetModelConfig());
+    }
   }
 
   return nullptr;  // success
