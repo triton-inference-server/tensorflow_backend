@@ -63,7 +63,7 @@ by checking the Release Notes which are available from the main
 ### Is the TensorFlow backend configurable?
 
 Each model's configuration can enabled [TensorFlow-specific
-optimizations](https://github.com/triton-inference-server/server/blob/master/docs/optimization.md#framework-specific-optimization).
+optimizations](https://github.com/triton-inference-server/server/blob/main/docs/user_guide/optimization.md#framework-specific-optimization).
 There are also a few [command-line options](#command-line-options)
 that can be used to configure the backend when launching Triton.
 
@@ -103,7 +103,7 @@ false, hence running TF models might still fail if TF needs
 to allocate more memory for its executions than what's allowed. 
 
 2. To limit large growths in memory from concurrent TensorFlow executions,
-you can also use the [rate limiter](https://github.com/triton-inference-server/server/blob/main/docs/rate_limiter.md)
+you can also use the [rate limiter](https://github.com/triton-inference-server/server/blob/main/docs/user_guide/rate_limiter.md)
 in Triton to limit the number of requests allowed to enter execution.
 
 ## Auto-Complete Model Configuration
@@ -112,7 +112,7 @@ Assuming Triton was not started with `--disable-auto-complete-config` command li
 option, the Tensorflow Backend makes use of the metadata available in TensorFlow
 SavedModel to populate the required fields in the model's config.pbtxt. You can
 learn more about Triton's support for auto-completing model configuration from
-[here](https://github.com/triton-inference-server/server/blob/main/docs/model_configuration.md#auto-generated-model-configuration).
+[here](https://github.com/triton-inference-server/server/blob/main/docs/user_guide/model_configuration.md#auto-generated-model-configuration).
 
 However, in Graphdef format, models do not carry sufficient metadata and hence
 Triton cannot generate model configuration for them. As a result, config.pbtxt
@@ -137,8 +137,8 @@ Otherwise max_batch_size is set as 0.
 
 The Tensorflow Backend is able to fill in the `name`, `data_type`, and `dims` provided this
 information is available in the model. Known limitations are inputs which are defined in
-the [`ragged_batching`](https://github.com/triton-inference-server/server/blob/main/docs/ragged_batching.md#batch-input) and
-[`sequence_batching`](https://github.com/triton-inference-server/server/blob/main/docs/model_configuration.md#sequence-batcher)
+the [`ragged_batching`](https://github.com/triton-inference-server/server/blob/main/docs/user_guide/ragged_batching.md#batch-input) and
+[`sequence_batching`](https://github.com/triton-inference-server/server/blob/main/docs/user_guide/model_configuration.md#sequence-batcher)
 fields. There is not enough information in the model for the backend to be able to autocomplete these.
 Additionally, the backend cannot auto complete configuration for scalar tensors.
 
@@ -150,7 +150,7 @@ autocompleted and those which are omitted will be ignored.
 
 ### Dynamic Batching
 
-If max_batch_size > 1 and no [scheduler](https://github.com/triton-inference-server/server/blob/main/docs/model_configuration.md#scheduling-and-batching)
+If max_batch_size > 1 and no [scheduler](https://github.com/triton-inference-server/server/blob/main/docs/user_guide/model_configuration.md#scheduling-and-batching)
 is provided, the dynamic batch scheduler will be enabled with default settings.
 
 ## Command-line Options
@@ -177,7 +177,7 @@ versions are 1 and 2. Default version is 2.
 
 ##### --backend-config=tensorflow,default-max-batch-size=\<int\>
 
-The default value to use for max_batch_size during [auto-completing model configuration](https://github.com/triton-inference-server/server/blob/main/docs/model_configuration.md#auto-generated-model-configuration)
+The default value to use for max_batch_size during [auto-completing model configuration](https://github.com/triton-inference-server/server/blob/main/docs/user_guide/model_configuration.md#auto-generated-model-configuration)
 when batching support is detected in the model. Note that if not
 explicitly provided, the default value for this option is 4.
 
