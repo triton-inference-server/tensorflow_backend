@@ -106,6 +106,12 @@ if(${TRITON_ENABLE_GPU})
   find_package(CUDAToolkit REQUIRED)
 endif() # TRITON_ENABLE_GPU
 
+# Gperftools
+#
+link_directories(/usr/local/lib)
+LIST(APPEND CMAKE_MODULE_PATH "${repo-common_SOURCE_DIR}/cmake")
+find_package(Gperftools REQUIRED)
+
 #
 # Shared library implementing the Triton Backend API
 #
@@ -186,6 +192,11 @@ add_library(
 target_include_directories(
   triton-tensorflow-backend
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_include_directories(
+  triton-tensorflow-backend
+  PRIVATE ${GPERFTOOLS_INCLUDE_DIR}
 )
 
 if (NOT ${TRITON_TENSORFLOW_DOCKER_BUILD})

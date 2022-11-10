@@ -31,6 +31,7 @@
 #include "triton/backend/backend_model.h"
 #include "triton/backend/backend_model_instance.h"
 #include "triton/backend/backend_output_responder.h"
+#include "gperftools/malloc_extension.h"
 
 #include <atomic>
 #include <chrono>
@@ -70,6 +71,12 @@ struct BackendConfiguration {
   std::map<int, std::vector<float>> memory_limit_mb_;
   int default_max_batch_size_;
 };
+
+void
+TRITONTF_ModelDeleteAndReleaseFreeMemory(TRITONTF_Model* model) {
+  TRITONTF_ModelDelete(model);
+  MallocExtension::instance()->ReleaseFreeMemory();
+}
 
 namespace graphdef {
 
@@ -935,7 +942,7 @@ ModelState::CreateModel(
         BackendConfig()->allow_soft_placement_,
         BackendConfig()->memory_limit_mb_, tftrt_config_ptr,
         auto_mixed_precision));
-    lmodel.tritontf_model_.reset(model, TRITONTF_ModelDelete);
+    lmodel.tritontf_model_.reset(model, TRITONTF_ModelDeleteAndReleaseFreeMemory);
 
     RETURN_IF_ERROR(graphdef::ValidateTRITONTFModel(this, model));
   } else {
@@ -949,7 +956,7 @@ ModelState::CreateModel(
         BackendConfig()->allow_soft_placement_,
         BackendConfig()->memory_limit_mb_, tftrt_config_ptr,
         auto_mixed_precision));
-    lmodel.tritontf_model_.reset(model, TRITONTF_ModelDelete);
+    lmodel.tritontf_model_.reset(model, TRITONTF_ModelDeleteAndReleaseFreeMemory);
 
     RETURN_IF_ERROR(savedmodel::ValidateTRITONTFModel(
         this, model, &(lmodel.input_name_map_), &(lmodel.output_name_map_)));
@@ -1185,7 +1192,7 @@ class AutoCompleteHelper {
  public:
   AutoCompleteHelper(ModelState* model_state, TRITONTF_Model* tritontf_model)
       : model_state_(model_state),
-        tritontf_model_(tritontf_model, TRITONTF_ModelDelete),
+        tritontf_model_(tritontf_model, TRITONTF_ModelDeleteAndReleaseFreeMemory),
         using_ragged_batching_(false)
   {
   }
@@ -1212,7 +1219,7 @@ class AutoCompleteHelper {
   std::vector<const TRITONTF_IOList*> CopyList(const TRITONTF_IOList* list);
 
   ModelState* model_state_;
-  std::unique_ptr<TRITONTF_Model, decltype(&TRITONTF_ModelDelete)>
+  std::unique_ptr<TRITONTF_Model, decltype(&TRITONTF_ModelDeleteAndReleaseFreeMemory)>
       tritontf_model_;
   bool model_support_batching_;
   bool using_ragged_batching_;
