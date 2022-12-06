@@ -973,10 +973,12 @@ ModelState::CreateModel(
       std::string io_data_type;
       RETURN_IF_ERROR(io.MemberAsString("data_type", &io_data_type));
 
-      input_names.push_back(io_names.back().c_str());
+      const auto& itr = lmodel.input_name_map_.find(io_names.back());
+      input_names.push_back(
+          itr != lmodel.input_name_map_.end() ? itr->second.c_str()
+                                              : io_names.back().c_str());
       input_types.push_back(ConvertDataType(io_data_type));
     }
-
     triton::common::TritonJson::Value config_outputs;
     RETURN_IF_ERROR(ModelConfig().MemberAsArray("output", &config_outputs));
     for (size_t i = 0; i < config_outputs.ArraySize(); i++) {
@@ -987,9 +989,13 @@ ModelState::CreateModel(
       std::string io_data_type;
       RETURN_IF_ERROR(io.MemberAsString("data_type", &io_data_type));
 
-      output_names.push_back(io_names.back().c_str());
+      const auto& itr = lmodel.output_name_map_.find(io_names.back());
+      output_names.push_back(
+          itr != lmodel.output_name_map_.end() ? itr->second.c_str()
+                                               : io_names.back().c_str());
       output_types.push_back(ConvertDataType(io_data_type));
     }
+
     RETURN_IF_TRITONTF_ERROR(TRITONTF_ModelMakeCallable(
         lmodel.tritontf_model_.get(), input_names.data(), input_types.data(),
         config_inputs.ArraySize(), output_names.data(), output_types.data(),
