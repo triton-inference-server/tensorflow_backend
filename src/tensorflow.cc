@@ -758,6 +758,9 @@ class ModelState : public BackendModel {
   // Parses and validates parameters in config
   TRITONSERVER_Error* ParseParameters();
 
+  // Parses and registers op libraries in config
+  TRITONSERVER_Error* ParseAndRegisterLibraries();
+
   // Validate that model configuration is supported by this backend.
   TRITONSERVER_Error* ValidateModelConfig();
 
@@ -1040,6 +1043,9 @@ ModelState::Create(TRITONBACKEND_Model* triton_model, ModelState** state)
     RETURN_IF_ERROR(ex.err_);
   }
 
+  // If libraries were provided with the config, register them.
+  RETURN_IF_ERROR((*state)->ParseAndRegisterLibraries());
+
   // Auto-complete the configuration if requested...
   bool auto_complete_config = false;
   RETURN_IF_ERROR(TRITONBACKEND_ModelAutoCompleteConfig(
@@ -1173,6 +1179,28 @@ ModelState::ParseParameters()
         return err;
       } else {
         TRITONSERVER_ErrorDelete(err);
+      }
+    }
+  }
+
+  return nullptr;
+}
+
+TRITONSERVER_Error*
+ModelState::ParseAndRegisterLibraries()
+{
+  // Register all op libraries that contain custom operations.
+  triton::common::TritonJson::Value model_ops;
+  if (model_config_.Find("model_operations", &model_ops)) {
+    triton::common::TritonJson::Value op_library_filenames;
+    if (model_ops.Find("op_library_filename", &op_library_filenames)) {
+      for (size_t op_idx = 0; op_idx < op_library_filenames.ArraySize();
+           op_idx++) {
+        std::string op_filename;
+        RETURN_IF_ERROR(
+            op_library_filenames.IndexAsString(op_idx, &op_filename));
+        RETURN_IF_TRITONTF_ERROR(
+            TRITONTF_LoadAndRegisterLibrary(op_filename.c_str()));
       }
     }
   }

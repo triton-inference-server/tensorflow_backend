@@ -280,6 +280,10 @@ TRITONTF_EXPORT TRITONTF_Error* TRITONTF_ModelInitialize(
     TRITONTF_Model* model, size_t num_init_operations,
     const char** init_operation_names);
 
+// Load a library and register its ops/kernels.
+TRITONTF_EXPORT TRITONTF_Error* TRITONTF_LoadAndRegisterLibrary(
+    const char* path);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif
