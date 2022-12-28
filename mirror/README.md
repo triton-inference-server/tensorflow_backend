@@ -30,7 +30,7 @@
 
 ## What are the files in this directory?
 
-This directory contains a mirror of the patch to upstream TensorFlow.
+This directory contains a mirror of the Triton-specific patch to upstream TensorFlow.
 
 ## How can I use these files?
 
