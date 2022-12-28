@@ -26,4 +26,12 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 -->
 
-This directory contains a mirror of the patch to upstream TensorFlow. This can serve as a reference for making changes to TensorFlow. These files are not used with Triton's current build.
+# Triton-TensorFlow Mirror
+
+## What are the files in this directory?
+
+This directory contains a mirror of the patch to upstream TensorFlow.
+
+## How can I use these files?
+
+They can serve as a reference for making changes to TensorFlow for use with this backend. These files are not used with Triton's current build.
