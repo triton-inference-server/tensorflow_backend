@@ -30,8 +30,10 @@
 
 ## What is the file in this directory?
 
-This directory contains a mirror of the patch to the upstream TensorFlow used in this backend. The header file for this implementation is located [here](../src/tensorflow_backend_tf.h).
+This directory contains a mirror of the patch to the upstream TensorFlow used in this backend.
+The header file for this implementation is located [here](../src/tensorflow_backend_tf.h).
 
 ## How can I use this file?
 
-It can serve as a reference for making changes to TensorFlow for use with this backend. This file is not used in Triton's current build.
+It can serve as a reference for making changes to TensorFlow for use with this backend.
+This file is not used in Triton's current build.
