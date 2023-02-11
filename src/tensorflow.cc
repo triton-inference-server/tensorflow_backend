@@ -1,4 +1,4 @@
-// Copyright 2020-2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright 2020-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions
@@ -1788,6 +1788,7 @@ ModelState::AutoCompleteConfig()
     bool exists;
     RETURN_IF_ERROR(FileExists(model_path, &exists));
     if (exists) {
+      // Load model for autocomplete to read from.
       err = TRITONTF_ModelCreateFromSavedModel(
           &tritontf_model, Name().c_str(), model_path.c_str(),
           TRITONTF_NO_GPU_DEVICE, num_intra_threads_, num_inter_threads_,
