@@ -1142,7 +1142,7 @@ ModelState::ParseParameters()
       } else {
         TRITONSERVER_ErrorDelete(err);
       }
-    } else if (num_inter_threads_ < 0) {
+    } else if (num_inter_threads_ < -1) {
       return TRITONSERVER_ErrorNew(
           TRITONSERVER_ERROR_INVALID_ARG,
           (std::string("parameter 'TF_NUM_INTER_THREADS' must be non-negative "
