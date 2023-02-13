@@ -994,7 +994,6 @@ TRITONTF_ModelCreateFromSavedModel(
     return TRITONTF_ErrorNew(
         "unable to load model '" + std::string(model_name) + "', expected '" +
         SIGNATURE_DEF_KEY_TO_USE + "' signature");
-    }
   }
 
   const tensorflow::SignatureDef& def = sig_itr->second;
@@ -1172,6 +1171,6 @@ TRITONTF_LoadAndRegisterLibrary(const char* path)
   if (status_code != TF_OK) {
     return TRITONTF_ErrorNew(status_msg);
   }
-  
+
   return nullptr;
 }
