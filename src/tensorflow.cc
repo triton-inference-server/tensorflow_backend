@@ -1,4 +1,4 @@
-// Copyright 2020-2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright 2020-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions
@@ -1052,6 +1052,8 @@ ModelState::Create(TRITONBACKEND_Model* triton_model, ModelState** state)
   // If libraries were provided with the config, register them.
   RETURN_IF_ERROR((*state)->ParseAndRegisterLibraries());
 
+  RETURN_IF_ERROR((*state)->ParseParameters());
+
   // Auto-complete the configuration if requested...
   bool auto_complete_config = false;
   RETURN_IF_ERROR(TRITONBACKEND_ModelAutoCompleteConfig(
@@ -1061,7 +1063,6 @@ ModelState::Create(TRITONBACKEND_Model* triton_model, ModelState** state)
   }
 
   RETURN_IF_ERROR((*state)->ValidateModelConfig());
-  RETURN_IF_ERROR((*state)->ParseParameters());
 
   return nullptr;  // success
 }
@@ -1787,12 +1788,13 @@ ModelState::AutoCompleteConfig()
     bool exists;
     RETURN_IF_ERROR(FileExists(model_path, &exists));
     if (exists) {
+      // Load model for autocomplete to read from.
       err = TRITONTF_ModelCreateFromSavedModel(
           &tritontf_model, Name().c_str(), model_path.c_str(),
-          TRITONTF_NO_GPU_DEVICE, 0 /* num_intra_threads */,
-          0 /* num_inter_threads */, false /* use_per_session_threads */,
-          "" /* graph_tag */, "" /* signature_def */, false /* have_graph */,
-          0 /* graph_level */, backend_config_->allow_gpu_memory_growth_,
+          TRITONTF_NO_GPU_DEVICE, num_intra_threads_, num_inter_threads_,
+          use_per_session_threads_, graph_tag_.c_str(), signature_def_.c_str(),
+          false /* has_graph_level */, 0 /* graph_level */,
+          backend_config_->allow_gpu_memory_growth_,
           backend_config_->per_process_gpu_memory_fraction_,
           backend_config_->allow_soft_placement_,
           backend_config_->memory_limit_mb_, nullptr /* tftrt_config */,
