@@ -990,7 +990,7 @@ TRITONTF_ModelCreateFromSavedModel(
   auto sig_itr =
       bundle->meta_graph_def.signature_def().find(SIGNATURE_DEF_KEY_TO_USE);
   if (sig_itr == bundle->meta_graph_def.signature_def().end()) {
-    // If serving signature_def key is not found, return error.
+    // If serving signature_def key is not found, return error
     return TRITONTF_ErrorNew(
         "unable to load model '" + std::string(model_name) + "', expected '" +
         SIGNATURE_DEF_KEY_TO_USE + "' signature");
