@@ -33,10 +33,12 @@ project(tritontensorflowbackend LANGUAGES C CXX)
 #
 option(TRITON_ENABLE_GPU "Enable GPU support in backend." ON)
 option(TRITON_ENABLE_STATS "Include statistics collections in backend." ON)
+option(TRITON_JETSON_BUILD "Build for Jetson. " OFF)
 set(TRITON_TENSORFLOW_VERSION "2" CACHE STRING "TensorFlow version, must be '1' or '2'.")
 set(TRITON_TENSORFLOW_DOCKER_IMAGE "" CACHE STRING "Docker image containing the TensorFlow build required by backend.")
 option(TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS "Install extra dependencies directly into the TensorFlow backend, instead of assuming they are present on the system." OFF)
 set(TRITON_TENSORFLOW_LIB_PATHS "" CACHE PATH "Paths to TensorFlow libraries. Multiple paths may be specified by separating them with a semicolon.")
+set(TRITON_TENSORFLOW_INCLUDE_PATHS "" CACHE PATH "Paths to TensorFlow includes. Multiple paths may be specified by separating them with a semicolon.")
 set(TRITON_TENSORFLOW_INCLUDE_PATHS "" CACHE PATH "Paths to TensorFlow includes. Multiple paths may be specified by separating them with a semicolon.")
 
 set(TRITON_BACKEND_REPO_TAG "main" CACHE STRING "Tag for triton-inference-server/backend repo.")
@@ -125,6 +127,17 @@ if (${TRITON_TENSORFLOW_DOCKER_BUILD})
     set(LIBS_ARCH "x86_64")
   endif()
 
+  if (${TRITON_JETSON_BUILD})
+    set(CC_PATH "${TRITON_TENSORFLOW_PYTHON_PATH}/${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}")
+    set(FW_PATH "${TRITON_TENSORFLOW_PYTHON_PATH}/${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}")
+    # Jetson container does not have TensorFlow license in it.
+    set(LICENSE_COPY "")
+  else()
+    set(CC_PATH "/usr/local/lib/tensorflow/${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}")
+    set(FW_PATH "${TRITON_TENSORFLOW_PYTHON_PATH}/${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}")
+    set(LICENSE_COPY("COMMAND docker cp tensorflow_backend_tflib:/opt/tensorflow/tensorflow-source/LICENSE LICENSE.tensorflow"))
+  endif()
+
   add_custom_command(
     OUTPUT
       ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
@@ -133,9 +146,9 @@ if (${TRITON_TENSORFLOW_DOCKER_BUILD})
     COMMAND docker pull ${TRITON_TENSORFLOW_DOCKER_IMAGE}
     COMMAND docker rm tensorflow_backend_tflib || echo "error ignored..." || true
     COMMAND docker create --name tensorflow_backend_tflib ${TRITON_TENSORFLOW_DOCKER_IMAGE}
-    COMMAND docker cp -L tensorflow_backend_tflib:/usr/local/lib/tensorflow/${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
-    COMMAND docker cp tensorflow_backend_tflib:${TRITON_TENSORFLOW_PYTHON_PATH}/${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
-    COMMAND docker cp tensorflow_backend_tflib:/opt/tensorflow/tensorflow-source/LICENSE LICENSE.tensorflow
+    COMMAND docker cp -L tensorflow_backend_tflib:${CC_PATH} ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
+    COMMAND docker cp tensorflow_backend_tflib:${FW_PATH} ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
+    ${LICENSE_COPY}
     COMMAND docker rm tensorflow_backend_tflib
 
     COMMAND docker stop tensorflow_backend_deps || echo "error ignored..." || true
