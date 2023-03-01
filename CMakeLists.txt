@@ -1,4 +1,4 @@
-# Copyright 2020-2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright 2020-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -136,7 +136,7 @@ if (${TRITON_TENSORFLOW_DOCKER_BUILD})
     set(CC_PATH "/usr/local/lib/tensorflow/${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}")
     set(FW_PATH "${TRITON_TENSORFLOW_PYTHON_PATH}/${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}")
     set(LICENSE_COPY("COMMAND docker cp tensorflow_backend_tflib:/opt/tensorflow/tensorflow-source/LICENSE LICENSE.tensorflow"))
-  endif()
+  endif() # TRITON_JETSON_BUILD
 
   add_custom_command(
     OUTPUT
@@ -289,11 +289,20 @@ install(
 )
 
 if (${TRITON_TENSORFLOW_DOCKER_BUILD})
+
+  # Jetson container does not have TensorFlow license in it.
+  if (NOT ${TRITON_JETSON_BUILD})
+  install(
+    FILES
+      ${CMAKE_CURRENT_BINARY_DIR}/LICENSE.tensorflow
+    DESTINATION ${TRITON_TENSORFLOW_BACKEND_INSTALLDIR}
+  )
+  endif() # NOT TRITON_JETSON_BUILD
+
   install(
     FILES
       ${CMAKE_CURRENT_BINARY_DIR}/${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
       ${CMAKE_CURRENT_BINARY_DIR}/${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
-      ${CMAKE_CURRENT_BINARY_DIR}/LICENSE.tensorflow
     DESTINATION ${TRITON_TENSORFLOW_BACKEND_INSTALLDIR}
   )
   install(
