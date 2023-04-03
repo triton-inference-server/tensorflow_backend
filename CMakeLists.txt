@@ -127,12 +127,9 @@ if (${TRITON_TENSORFLOW_DOCKER_BUILD})
   if (${TRITON_JETSON_BUILD})
     set(CC_PATH "${TRITON_TENSORFLOW_PYTHON_PATH}/${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}")
     set(FW_PATH "${TRITON_TENSORFLOW_PYTHON_PATH}/${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}")
-    # Jetson container does not have TensorFlow license in it.
-    set(LICENSE_COPY "")
   else()
     set(CC_PATH "/usr/local/lib/tensorflow/${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}")
     set(FW_PATH "${TRITON_TENSORFLOW_PYTHON_PATH}/${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}")
-    set(LICENSE_COPY "COMMAND docker cp tensorflow_backend_tflib:/opt/tensorflow/tensorflow-source/LICENSE LICENSE.tensorflow")
   endif() # TRITON_JETSON_BUILD
 
   add_custom_command(
@@ -145,7 +142,8 @@ if (${TRITON_TENSORFLOW_DOCKER_BUILD})
     COMMAND docker create --name tensorflow_backend_tflib ${TRITON_TENSORFLOW_DOCKER_IMAGE}
     COMMAND docker cp -L tensorflow_backend_tflib:${CC_PATH} ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
     COMMAND docker cp tensorflow_backend_tflib:${FW_PATH} ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
-    ${LICENSE_COPY}
+    # Jetson container does not have TensorFlow license in it.
+    COMMAND if [ "${TRITON_JETSON_BUILD}" = "OFF" ] \; then docker cp tensorflow_backend_tflib:/opt/tensorflow/tensorflow-source/LICENSE LICENSE.tensorflow \; fi \;
     COMMAND docker rm tensorflow_backend_tflib
 
     COMMAND docker stop tensorflow_backend_deps || echo "error ignored..." || true
