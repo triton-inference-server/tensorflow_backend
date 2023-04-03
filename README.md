@@ -1,5 +1,5 @@
 <!--
-# Copyright 2020-2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright 2020-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -54,9 +54,8 @@ page](https://github.com/triton-inference-server/server/issues).
 
 ### What versions of TensorFlow are supported by this backend?
 
-The TensorFlow backend supports both TensorFlow 1.x and 2.x. Each
-release of Triton will container support for a specific 1.x and 2.x
-version. You can find the specific version supported for any release
+Starting from 23.04, the TensorFlow backend only supports TensorFlow 2.x.
+You can find the specific version supported for any release
 by checking the Release Notes which are available from the main
 [server](https://github.com/triton-inference-server/server) repo.
 
@@ -172,8 +171,10 @@ GPU memory.
 
 ##### --backend-config=tensorflow,version=\<int\>
 
-Select the version of the TensorFlow library to be used, available
-versions are 1 and 2. Default version is 2.
+Select the version of the TensorFlow library to be used. Default version is 2.
+Note that starting from 23.04 release, the TensorFlow backend only supports
+TensorFlow 2. If you'd like to use TensorFlow 1 with Triton prior to 23.04,
+you can specify the version to 1 using this command-line option.
 
 ##### --backend-config=tensorflow,default-max-batch-size=\<int\>
 
@@ -189,25 +190,16 @@ Use a recent cmake to build. First install the required dependencies.
 $ apt-get install patchelf rapidjson-dev
 ```
 
-The backend can be built to support either TensorFlow 1.x or
-TensorFlow 2.x. An appropriate TensorFlow container from
+The backend can be built to support TensorFlow 2.x. Starting from 23.04, Triton
+no longer supports TensorFlow 1.x and exclusively uses TensorFlow 2.x.  An
+appropriate TensorFlow container from
 [NGC](https://ngc.nvidia.com) must be used. For example, to build a backend
-that uses the 21.02 version of the TensorFlow 1.x container from NGC:
+that uses the 23.04 version of the TensorFlow 2.x container from NGC:
 
 ```
 $ mkdir build
 $ cd build
-$ cmake -DCMAKE_INSTALL_PREFIX:PATH=`pwd`/install -DTRITON_TENSORFLOW_VERSION=1 -DTRITON_TENSORFLOW_DOCKER_IMAGE="nvcr.io/nvidia/tensorflow:21.02-tf1-py3" ..
-$ make install
-```
-
-For example, to build a backend that uses the 21.02 version of the
-TensorFlow 2.x container from NGC:
-
-```
-$ mkdir build
-$ cd build
-$ cmake -DCMAKE_INSTALL_PREFIX:PATH=`pwd`/install -DTRITON_TENSORFLOW_VERSION=2 -DTRITON_TENSORFLOW_DOCKER_IMAGE="nvcr.io/nvidia/tensorflow:21.02-tf2-py3" ..
+$ cmake -DCMAKE_INSTALL_PREFIX:PATH=`pwd`/install -DTRITON_TENSORFLOW_DOCKER_IMAGE="nvcr.io/nvidia/tensorflow:23.04-tf2-py3" ..
 $ make install
 ```
 
@@ -224,15 +216,13 @@ but the listed CMake argument can be used to override.
 Currently, Triton requires that a specially patched version of
 TensorFlow be used with the TensorFlow backend. The full source for
 these TensorFlow versions are available as Docker images from
-[NGC](https://ngc.nvidia.com). For example, the TensorFlow 1.x version
-compatible with the 21.02 release of Triton is available as
-nvcr.io/nvidia/tensorflow:21.02-tf1-py3 and the TensorFlow 2.x version
-compatible with the 21.02 release of Triton is available as
-nvcr.io/nvidia/tensorflow:21.02-tf2-py3.
+[NGC](https://ngc.nvidia.com). For example, the TensorFlow 2.x version
+compatible with the 23.04 release of Triton is available as
+nvcr.io/nvidia/tensorflow:23.04-tf2-py3.
 
 You can modify and rebuild TensorFlow within these images to generate
 the shared libraries needed by the Triton TensorFlow backend. In the
-TensorFlow 1.x or TensorFlow 2.x container you rebuild using:
+TensorFlow 2.x container you rebuild using:
 
 ```
 $ /opt/tensorflow/nvbuild.sh

@@ -1,4 +1,4 @@
-# Copyright 2020-2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright 2020-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -33,7 +33,7 @@ project(tritontensorflowbackend LANGUAGES C CXX)
 #
 option(TRITON_ENABLE_GPU "Enable GPU support in backend." ON)
 option(TRITON_ENABLE_STATS "Include statistics collections in backend." ON)
-set(TRITON_TENSORFLOW_VERSION "2" CACHE STRING "TensorFlow version, must be '1' or '2'.")
+set(TRITON_TENSORFLOW_VERSION "2" CACHE STRING "TensorFlow version, must be '2'. Starting from 23.04, Triton no longer supports Tensorflow 1.")
 set(TRITON_TENSORFLOW_DOCKER_IMAGE "" CACHE STRING "Docker image containing the TensorFlow build required by backend.")
 option(TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS "Install extra dependencies directly into the TensorFlow backend, instead of assuming they are present on the system." OFF)
 set(TRITON_TENSORFLOW_LIB_PATHS "" CACHE PATH "Paths to TensorFlow libraries. Multiple paths may be specified by separating them with a semicolon.")
@@ -60,15 +60,13 @@ set(TRITON_TENSORFLOW_CC_LIBNAME "libtensorflow_cc.so")
 set(TRITON_TENSORFLOW_FW_LIBNAME "libtensorflow_framework.so")
 set(TRITON_TENSORFLOW_LDFLAGS "-ltensorflow_cc -ltensorflow_framework")
 if(${TRITON_TENSORFLOW_VERSION} EQUAL "1")
-  set(TRITON_TENSORFLOW_BACKEND_LIBNAME triton_tensorflow1)
-  set(TRITON_TENSORFLOW_BACKEND_INSTALLDIR ${CMAKE_INSTALL_PREFIX}/backends/tensorflow1)
-  set(TRITON_TENSORFLOW_PYTHON_PATH "/usr/local/lib/python3.8/dist-packages/tensorflow_core")
+  message(FATAL_ERROR "Starting from 23.04, Triton no longer supports TensorFlow 1. Please switch to TensorFlow 2.")
 elseif(${TRITON_TENSORFLOW_VERSION} EQUAL "2")
   set(TRITON_TENSORFLOW_BACKEND_LIBNAME triton_tensorflow2)
   set(TRITON_TENSORFLOW_BACKEND_INSTALLDIR ${CMAKE_INSTALL_PREFIX}/backends/tensorflow2)
   set(TRITON_TENSORFLOW_PYTHON_PATH "/usr/local/lib/python3.8/dist-packages/tensorflow")
 else()
-  message(FATAL_ERROR "TRITON_TENSORFLOW_VERSION allowed values are '1' and '2'")
+  message(FATAL_ERROR "TRITON_TENSORFLOW_VERSION allowed values is '2'")
 endif()
 
 #
