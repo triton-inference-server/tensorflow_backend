@@ -132,7 +132,7 @@ if (${TRITON_TENSORFLOW_DOCKER_BUILD})
   else()
     set(CC_PATH "/usr/local/lib/tensorflow/${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}")
     set(FW_PATH "${TRITON_TENSORFLOW_PYTHON_PATH}/${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}")
-    set(LICENSE_COPY("COMMAND docker cp tensorflow_backend_tflib:/opt/tensorflow/tensorflow-source/LICENSE LICENSE.tensorflow"))
+    set(LICENSE_COPY "COMMAND docker cp tensorflow_backend_tflib:/opt/tensorflow/tensorflow-source/LICENSE LICENSE.tensorflow")
   endif() # TRITON_JETSON_BUILD
 
   add_custom_command(
