@@ -34,6 +34,7 @@ project(tritontensorflowbackend LANGUAGES C CXX)
 option(TRITON_ENABLE_GPU "Enable GPU support in backend." ON)
 option(TRITON_ENABLE_STATS "Include statistics collections in backend." ON)
 option(TRITON_JETSON_BUILD "Build for Jetson. " OFF)
+option(TRITON_TENSORFLOW_LICENSE_AVAILABLE "Whether the TensorFlow license is available in this build. " ON)
 set(TRITON_TENSORFLOW_VERSION "2" CACHE STRING "TensorFlow version, must be '2'. Starting from 23.04, Triton no longer supports Tensorflow 1.")
 set(TRITON_TENSORFLOW_DOCKER_IMAGE "" CACHE STRING "Docker image containing the TensorFlow build required by backend.")
 option(TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS "Install extra dependencies directly into the TensorFlow backend, instead of assuming they are present on the system." OFF)
@@ -127,6 +128,8 @@ if (${TRITON_TENSORFLOW_DOCKER_BUILD})
   if (${TRITON_JETSON_BUILD})
     set(CC_PATH "${TRITON_TENSORFLOW_PYTHON_PATH}/${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}")
     set(FW_PATH "${TRITON_TENSORFLOW_PYTHON_PATH}/${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}")
+    # Jetson container does not have TensorFlow license in it.
+    set(TRITON_TENSORFLOW_LICENSE_AVAILABLE OFF)
   else()
     set(CC_PATH "/usr/local/lib/tensorflow/${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}")
     set(FW_PATH "${TRITON_TENSORFLOW_PYTHON_PATH}/${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}")
@@ -142,8 +145,7 @@ if (${TRITON_TENSORFLOW_DOCKER_BUILD})
     COMMAND docker create --name tensorflow_backend_tflib ${TRITON_TENSORFLOW_DOCKER_IMAGE}
     COMMAND docker cp -L tensorflow_backend_tflib:${CC_PATH} ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
     COMMAND docker cp tensorflow_backend_tflib:${FW_PATH} ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
-    # Jetson container does not have TensorFlow license in it.
-    COMMAND if [ "${TRITON_JETSON_BUILD}" = "OFF" ] \; then docker cp tensorflow_backend_tflib:/opt/tensorflow/tensorflow-source/LICENSE LICENSE.tensorflow \; fi \;
+    COMMAND if [ "${TRITON_TENSORFLOW_LICENSE_AVAILABLE}" ] \; then docker cp tensorflow_backend_tflib:/opt/tensorflow/tensorflow-source/LICENSE LICENSE.tensorflow \; fi \;
     COMMAND docker rm tensorflow_backend_tflib
 
     COMMAND docker stop tensorflow_backend_deps || echo "error ignored..." || true
@@ -285,14 +287,13 @@ install(
 
 if (${TRITON_TENSORFLOW_DOCKER_BUILD})
 
-  # Jetson container does not have TensorFlow license in it.
-  if (NOT ${TRITON_JETSON_BUILD})
+  if (TRITON_TENSORFLOW_LICENSE_AVAILABLE)
   install(
     FILES
       ${CMAKE_CURRENT_BINARY_DIR}/LICENSE.tensorflow
     DESTINATION ${TRITON_TENSORFLOW_BACKEND_INSTALLDIR}
   )
-  endif() # NOT TRITON_JETSON_BUILD
+  endif() # TRITON_TENSORFLOW_LICENSE_AVAILABLE
 
   install(
     FILES
