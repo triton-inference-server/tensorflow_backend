@@ -317,16 +317,9 @@ ValidateTRITONTFModel(
 
   // Verify that the model configuration input and outputs match what
   // is expected by the model.
-  if (expected_inputs.size() != expected_input_cnt) {
-    return TRITONSERVER_ErrorNew(
-        TRITONSERVER_ERROR_INVALID_ARG,
-        std::string(
-            "unable to load model '" + model_name +
-            "', configuration expects " + std::to_string(expected_input_cnt) +
-            " inputs, model provides " + std::to_string(expected_inputs.size()))
-            .c_str());
-  }
-
+  // Check the name of each input first before checking the count to ensure that
+  // the error message returned includes the names of any unexpected extra
+  // inputs, instead of just a count mismatch error.
   for (size_t i = 0; i < config_inputs.ArraySize(); i++) {
     triton::common::TritonJson::Value io;
     RETURN_IF_ERROR(config_inputs.IndexAsObject(i, &io));
@@ -340,6 +333,25 @@ ValidateTRITONTFModel(
           TRITONSERVER_ERROR_INTERNAL,
           std::string("unexpected inference input '" + io_name + "'").c_str());
     }
+  }
+
+  if (expected_inputs.size() != expected_input_cnt) {
+    return TRITONSERVER_ErrorNew(
+        TRITONSERVER_ERROR_INVALID_ARG,
+        std::string(
+            "unable to load model '" + model_name +
+            "', configuration expects " + std::to_string(expected_input_cnt) +
+            " inputs, model provides " + std::to_string(expected_inputs.size()))
+            .c_str());
+  }
+
+  for (size_t i = 0; i < config_inputs.ArraySize(); i++) {
+    triton::common::TritonJson::Value io;
+    RETURN_IF_ERROR(config_inputs.IndexAsObject(i, &io));
+
+    std::string io_name;
+    RETURN_IF_ERROR(io.MemberAsString("name", &io_name));
+    const TRITONTF_IO* input = FindIOByName(inputs, io_name);
 
     // If a reshape is provided for the input then use that when
     // validating that the TF model matches what is expected.
