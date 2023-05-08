@@ -108,7 +108,7 @@ in Triton to limit the number of requests allowed to enter execution.
 ## Auto-Complete Model Configuration
 
 Assuming Triton was not started with `--disable-auto-complete-config` command line
-option, the Tensorflow Backend makes use of the metadata available in TensorFlow
+option, the TensorFlow backend makes use of the metadata available in TensorFlow
 SavedModel to populate the required fields in the model's config.pbtxt. You can
 learn more about Triton's support for auto-completing model configuration from
 [here](https://github.com/triton-inference-server/server/blob/main/docs/user_guide/model_configuration.md#auto-generated-model-configuration).
@@ -117,7 +117,7 @@ However, in Graphdef format, models do not carry sufficient metadata and hence
 Triton cannot generate model configuration for them. As a result, config.pbtxt
 must be provided for such models explicitly.
 
-Tensorflow backend can complete the following fields in model configuration:
+TensorFlow backend can complete the following fields in model configuration:
 
 ### max_batch_size
 
@@ -134,7 +134,7 @@ Otherwise max_batch_size is set as 0.
 
 ### Inputs and Outputs
 
-The Tensorflow Backend is able to fill in the `name`, `data_type`, and `dims` provided this
+The TensorFlow backend is able to fill in the `name`, `data_type`, and `dims` provided this
 information is available in the model. Known limitations are inputs which are defined in
 the [`ragged_batching`](https://github.com/triton-inference-server/server/blob/main/docs/user_guide/ragged_batching.md#batch-input) and
 [`sequence_batching`](https://github.com/triton-inference-server/server/blob/main/docs/user_guide/model_configuration.md#sequence-batcher)
@@ -235,10 +235,17 @@ commit*), and then build the backend as described
 TRITON_TENSORFLOW_DOCKER_IMAGE set to refer to the new Docker image.
 
 
-## Using the Tensorflow Backend
+## Using the TensorFlow Backend
+### Platform
+
+TensorFlow recognizes two kinds of model format, GraphDef and SavedModel. To
+differentiate the model format, 'platform' in model's 'config.pbtxt' file will
+be used, "tensorflow_graphdef" should be set for GraphDef format and
+"tensorflow_savedmodel" should be set for SavedModel format.
+
 ### Parameters
 
-Configuration of Tensorflow for a model is done through the Parameters section of the model's 'config.pbtxt' file. The parameters and their description are as follows.
+Configuration of TensorFlow for a model is done through the Parameters section of the model's 'config.pbtxt' file. The parameters and their description are as follows.
 
 * `TF_NUM_INTRA_THREADS`: Number of threads to use to parallelize the execution of an individual op. Auto-configured by default. See [protobuf here](https://github.com/tensorflow/tensorflow/blob/6f72753a66d6abab8b839cc263a9f1329861f6f9/tensorflow/core/protobuf/config.proto#L393). Should be a non-negative number.
 * `TF_NUM_INTER_THREADS`: Controls the number of operators that can be executed simultaneously. Auto-configured by default. See [protobuf here](https://github.com/tensorflow/tensorflow/blob/6f72753a66d6abab8b839cc263a9f1329861f6f9/tensorflow/core/protobuf/config.proto#L404).
