@@ -239,13 +239,25 @@ TRITON_TENSORFLOW_DOCKER_IMAGE set to refer to the new Docker image.
 ### Platform
 
 TensorFlow recognizes two kinds of model format, GraphDef and SavedModel. To
-differentiate the model format, 'platform' in model's 'config.pbtxt' file will
-be used, "tensorflow_graphdef" should be set for GraphDef format and
-"tensorflow_savedmodel" should be set for SavedModel format.
+differentiate the model format, specify the appropriate `platform` in model's
+`config.pbtxt` file, such as:
+```
+# config.pbtxt for Graphdef format
+...
+platform: "tensorflow_graphdef"
+...
+```
+or
+```
+# config.pbtxt for SavedModel format
+...
+platform: "tensorflow_savedmodel"
+...
+```
 
 ### Parameters
 
-Configuration of TensorFlow for a model is done through the Parameters section of the model's 'config.pbtxt' file. The parameters and their description are as follows.
+Configuration of TensorFlow for a model is done through the Parameters section of the model's `config.pbtxt` file. The parameters and their description are as follows.
 
 * `TF_NUM_INTRA_THREADS`: Number of threads to use to parallelize the execution of an individual op. Auto-configured by default. See [protobuf here](https://github.com/tensorflow/tensorflow/blob/6f72753a66d6abab8b839cc263a9f1329861f6f9/tensorflow/core/protobuf/config.proto#L393). Should be a non-negative number.
 * `TF_NUM_INTER_THREADS`: Controls the number of operators that can be executed simultaneously. Auto-configured by default. See [protobuf here](https://github.com/tensorflow/tensorflow/blob/6f72753a66d6abab8b839cc263a9f1329861f6f9/tensorflow/core/protobuf/config.proto#L404).
