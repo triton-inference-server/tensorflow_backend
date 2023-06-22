@@ -24,6 +24,13 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#include <atomic>
+#include <chrono>
+#include <memory>
+#include <set>
+#include <thread>
+#include <unordered_map>
+
 #include "tensorflow_backend_tf.h"
 #include "tensorflow_utils.h"
 #include "triton/backend/backend_common.h"
@@ -31,13 +38,6 @@
 #include "triton/backend/backend_model.h"
 #include "triton/backend/backend_model_instance.h"
 #include "triton/backend/backend_output_responder.h"
-
-#include <atomic>
-#include <chrono>
-#include <memory>
-#include <set>
-#include <thread>
-#include <unordered_map>
 
 #ifdef TRITON_ENABLE_GPU
 #include <cuda_runtime_api.h>
@@ -1925,9 +1925,9 @@ ModelInstanceState::Create(
     }
   }
 
-  auto model_path =
-      JoinPath({model_state->RepositoryPath(),
-                std::to_string(model_state->Version()), cc_model_filename});
+  auto model_path = JoinPath(
+      {model_state->RepositoryPath(), std::to_string(model_state->Version()),
+       cc_model_filename});
 
   {
     bool exists;
