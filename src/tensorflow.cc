@@ -369,7 +369,7 @@ ValidateTRITONTFModel(
         RETURN_IF_ERROR(allow_ragged_batch_json.AsBool(&allow_ragged_batch));
       }
       if (allow_ragged_batch) {
-        // Make sure the input has shpae [-1]
+        // Make sure the input has shape [-1]
         if ((input->shape_->rank_ != 1) ||
             (input->shape_->dims_[0] != WILDCARD_DIM)) {
           return TRITONSERVER_ErrorNew(
