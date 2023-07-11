@@ -94,12 +94,12 @@ From the TensorFlow GPU docs: "[Memory is not released since it can lead to memo
 The following are a few available options to limit the total amount of memory
 that TensorFlow allocates:
 
-1. You can use `gpu-memory-fraction` as described 
+1. You can use `gpu-memory-fraction` as described
 [here](https://github.com/triton-inference-server/tensorflow_backend#--backend-configtensorflowgpu-memory-fractionfloat).
 This restricts an upper-bound on the total memory TensorFlow can allocate for
 the process. However, note when using this option that allow-growth is set to
 false, hence running TF models might still fail if TF needs
-to allocate more memory for its executions than what's allowed. 
+to allocate more memory for its executions than what's allowed.
 
 2. To limit large growths in memory from concurrent TensorFlow executions,
 you can also use the [rate limiter](https://github.com/triton-inference-server/server/blob/main/docs/user_guide/rate_limiter.md)
@@ -142,7 +142,7 @@ fields. There is not enough information in the model for the backend to be able 
 Additionally, the backend cannot auto complete configuration for scalar tensors.
 
 Autocompleting outputs follows the following rules:
-- If `outputs` is empty or undefined in the model configuration, all outputs in the savedmodel 
+- If `outputs` is empty or undefined in the model configuration, all outputs in the savedmodel
 will be autocompleted
 - If one or more output is defined in `outputs`, those outputs which are defined will be
 autocompleted and those which are omitted will be ignored.
