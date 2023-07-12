@@ -787,22 +787,32 @@ class ModelState : public BackendModel {
   std::string graph_tag_;
   std::string signature_def_;
   std::string init_ops_file_;
+  // Mutex to protect concurrent access of model state by model instances
+  std::mutex model_mtx_;
 };
 
 TRITONSERVER_Error*
 ModelState::GetModel(int device_id, const std::string& model_path, Model* model)
 {
-  // reuse existing model if it has been created on the device
-  auto it = models_.find(device_id);
-  if ((it != models_.end()) &&
-      (it->second.first < (size_t)max_session_share_count_)) {
-    *model = it->second.second;
-    ++it->second.first;
-    return nullptr;  // success
+  {
+    std::unique_lock<std::mutex> lk(model_mtx_);
+    // reuse existing model if it has been created on the device
+    auto it = models_.find(device_id);
+    if ((it != models_.end()) &&
+        (it->second.first < (size_t)max_session_share_count_)) {
+      *model = it->second.second;
+      ++it->second.first;
+      return nullptr;  // success
+    }
   }
 
+  // Allow concurrent creation of models as it's the heaviest operation
   RETURN_IF_ERROR(CreateModel(device_id, model_path, model));
-  models_[device_id] = std::make_pair(1, *model);
+
+  {
+    std::unique_lock<std::mutex> lk(model_mtx_);
+    models_[device_id] = std::make_pair(1, *model);
+  }
   return nullptr;  // success
 }
 
