@@ -328,3 +328,15 @@ parameters: {
   }
 }
 ```
+
+
+## Important Notes
+* We have observed memory growth issues with the SavedModel format during model
+loading and unloading. It is possible that this is not an actual memory leak but
+rather a result of the system's malloc heuristics, causing the memory to not be
+immediately released back to the operating system. We have noticed improved
+memory footprint by replacing the default malloc library with either
+[tcmalloc](https://github.com/google/tcmalloc) or
+[jemalloc](https://github.com/jemalloc/jemalloc). Please refer to the
+[documentation](https://github.com/triton-inference-server/server/blob/main/docs/user_guide/model_management.md#model-control-mode-explicit)
+for instructions on how to use tcmalloc or jemalloc with Triton.
