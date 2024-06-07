@@ -292,6 +292,7 @@ NewSessionOptions(
         tftrt_config->max_workspace_size_bytes_);
     (*trt_parameter_map)["max_cached_engines"].set_i(
         tftrt_config->max_cached_engines_);
+    (*trt_parameter_map)["use_implicit_batch"].set_i(false);
     auto custom_optimizer = opt_config->add_custom_optimizers();
     // Add a constfold optimizer to cleanup the unused Const nodes.
     custom_optimizer->set_name("constfold");
