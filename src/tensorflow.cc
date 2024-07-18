@@ -582,8 +582,11 @@ SetStringInputTensor(
       &contiguous_buffer, stream, &cuda_copy);
   if (err != nullptr) {
     RESPOND_AND_SET_NULL_IF_ERROR(response, err);
-    FillStringTensor(
-        tensor, tensor_offset + element_idx, request_element_cnt - element_idx);
+    if (element_idx < request_element_cnt) {
+      FillStringTensor(
+          tensor, tensor_offset + element_idx,
+          request_element_cnt - element_idx);
+    }
     free(contiguous_buffer);
     return cuda_copy;
   }
@@ -595,68 +598,22 @@ SetStringInputTensor(
   }
 #endif  // TRITON_ENABLE_GPU
 
-  // Parse content and assign to 'tensor'. Each string in 'content'
-  // is a 4-byte length followed by the string itself with no
-  // null-terminator.
-  while (content_byte_size >= sizeof(uint32_t)) {
-    if (element_idx >= request_element_cnt) {
-      RESPOND_AND_SET_NULL_IF_ERROR(
-          response,
-          TRITONSERVER_ErrorNew(
-              TRITONSERVER_ERROR_INVALID_ARG,
-              std::string(
-                  "unexpected number of string elements " +
-                  std::to_string(element_idx + 1) + " for inference input '" +
-                  name + "', expecting " + std::to_string(request_element_cnt))
-                  .c_str()));
-      FillStringTensor(
-          tensor, tensor_offset + element_idx,
-          request_element_cnt - element_idx);
-      free(contiguous_buffer);
-      return cuda_copy;
-    }
-
-    const uint32_t len = *(reinterpret_cast<const uint32_t*>(content));
-    content += sizeof(uint32_t);
-    content_byte_size -= sizeof(uint32_t);
-
-    if (content_byte_size < len) {
-      RESPOND_AND_SET_NULL_IF_ERROR(
-          response,
-          TRITONSERVER_ErrorNew(
-              TRITONSERVER_ERROR_INVALID_ARG,
-              std::string(
-                  "incomplete string data for inference input '" +
-                  std::string(name) + "', expecting string of length " +
-                  std::to_string(len) + " but only " +
-                  std::to_string(content_byte_size) + " bytes available")
-                  .c_str()));
-      FillStringTensor(
-          tensor, tensor_offset + element_idx,
-          request_element_cnt - element_idx);
-      free(contiguous_buffer);
-      return cuda_copy;
-    }
-
+  auto callback = [](TRITONTF_Tensor* tensor, const size_t tensor_offset,
+                     const size_t element_idx, const char* content,
+                     const uint32_t len) {
     TRITONTF_TensorSetString(tensor, tensor_offset + element_idx, content, len);
-    content += len;
-    content_byte_size -= len;
-    element_idx++;
-  }
+  };
+  auto fn = std::bind(
+      callback, tensor, tensor_offset, std::placeholders::_1,
+      std::placeholders::_2, std::placeholders::_3);
 
-  if ((*response != nullptr) && (element_idx != request_element_cnt)) {
-    RESPOND_AND_SET_NULL_IF_ERROR(
-        response, TRITONSERVER_ErrorNew(
-                      TRITONSERVER_ERROR_INTERNAL,
-                      std::string(
-                          "expected " + std::to_string(request_element_cnt) +
-                          " strings for inference input '" + name + "', got " +
-                          std::to_string(element_idx))
-                          .c_str()));
+  err = ValidateStringBuffer(
+      content, content_byte_size, request_element_cnt, name, &element_idx, fn);
+  if (err != nullptr) {
+    RESPOND_AND_SET_NULL_IF_ERROR(response, err);
     FillStringTensor(
         tensor, tensor_offset + element_idx, request_element_cnt - element_idx);
   }
-
   free(contiguous_buffer);
   return cuda_copy;
 }
