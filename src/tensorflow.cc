@@ -567,7 +567,6 @@ SetStringInputTensor(
     cudaStream_t stream, const char* host_policy_name)
 {
   bool cuda_copy = false;
-  size_t element_idx = 0;
 
   // For string data type, we always need to have the data on CPU so
   // that we can read string length and construct the string
@@ -582,11 +581,7 @@ SetStringInputTensor(
       &contiguous_buffer, stream, &cuda_copy);
   if (err != nullptr) {
     RESPOND_AND_SET_NULL_IF_ERROR(response, err);
-    if (element_idx < request_element_cnt) {
-      FillStringTensor(
-          tensor, tensor_offset + element_idx,
-          request_element_cnt - element_idx);
-    }
+    FillStringTensor(tensor, tensor_offset, request_element_cnt);
     free(contiguous_buffer);
     return cuda_copy;
   }
@@ -602,15 +597,16 @@ SetStringInputTensor(
   err = ValidateStringBuffer(
       content, content_byte_size, request_element_cnt, name, &str_list);
   // Set string values.
-  for (; element_idx < str_list.size(); ++element_idx) {
+  for (size_t element_idx = 0; element_idx < str_list.size(); ++element_idx) {
     const auto& [addr, len] = str_list[element_idx];
     TRITONTF_TensorSetString(tensor, tensor_offset + element_idx, addr, len);
   }
 
+  size_t element_cnt = str_list.size();
   if (err != nullptr) {
     RESPOND_AND_SET_NULL_IF_ERROR(response, err);
     FillStringTensor(
-        tensor, tensor_offset + element_idx, request_element_cnt - element_idx);
+        tensor, tensor_offset + element_cnt, request_element_cnt - element_cnt);
   }
   free(contiguous_buffer);
   return cuda_copy;
