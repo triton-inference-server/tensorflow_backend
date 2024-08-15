@@ -38,7 +38,7 @@ option(TRITON_ENABLE_GPU "Enable GPU support in backend." ON)
 option(TRITON_ENABLE_STATS "Include statistics collections in backend." ON)
 set(TRITON_TENSORFLOW_VERSION "2" CACHE STRING "TensorFlow version, must be '2'. Starting from 23.04, Triton no longer supports Tensorflow 1.")
 set(TRITON_TENSORFLOW_DOCKER_IMAGE "" CACHE STRING "Docker image containing the TensorFlow build required by backend.")
-option(TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS "Install extra dependencies directly into the TensorFlow backend, instead of assuming they are present on the system." ON)
+option(TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS "Install extra dependencies directly into the TensorFlow backend, instead of assuming they are present on the system." OFF)
 set(TRITON_TENSORFLOW_LIB_PATHS "" CACHE PATH "Paths to TensorFlow libraries. Multiple paths may be specified by separating them with a semicolon.")
 set(TRITON_TENSORFLOW_INCLUDE_PATHS "" CACHE PATH "Paths to TensorFlow includes. Multiple paths may be specified by separating them with a semicolon.")
 
@@ -67,8 +67,6 @@ if(LINUX)
     set(RHEL_BUILD ON)
   endif(${DISTRO_ID_LIKE} MATCHES "rhel|centos")
 endif(LINUX)
-
-message("RHEL BUILD STATUS: ${RHEL_BUILD}")
 
 set(TRITON_TENSORFLOW_CC_LIBNAME "libtensorflow_cc.so")
 set(TRITON_TENSORFLOW_FW_LIBNAME "libtensorflow_framework.so")
