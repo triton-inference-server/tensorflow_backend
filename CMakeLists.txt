@@ -38,7 +38,7 @@ option(TRITON_ENABLE_GPU "Enable GPU support in backend." ON)
 option(TRITON_ENABLE_STATS "Include statistics collections in backend." ON)
 set(TRITON_TENSORFLOW_VERSION "2" CACHE STRING "TensorFlow version, must be '2'. Starting from 23.04, Triton no longer supports Tensorflow 1.")
 set(TRITON_TENSORFLOW_DOCKER_IMAGE "" CACHE STRING "Docker image containing the TensorFlow build required by backend.")
-option(TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS "Install extra dependencies directly into the TensorFlow backend, instead of assuming they are present on the system." OFF)
+option(TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS "Install extra dependencies directly into the TensorFlow backend, instead of assuming they are present on the system." ON)
 set(TRITON_TENSORFLOW_LIB_PATHS "" CACHE PATH "Paths to TensorFlow libraries. Multiple paths may be specified by separating them with a semicolon.")
 set(TRITON_TENSORFLOW_INCLUDE_PATHS "" CACHE PATH "Paths to TensorFlow includes. Multiple paths may be specified by separating them with a semicolon.")
 
@@ -60,6 +60,16 @@ if(TRITON_TENSORFLOW_LIB_PATHS STREQUAL "")
 endif()
 message(STATUS "Using Tensorflow docker: ${TRITON_TENSORFLOW_DOCKER_BUILD}")
 
+set(RHEL_BUILD OFF)
+if(LINUX)
+  file(STRINGS "/etc/os-release" DISTRO_ID_LIKE REGEX "ID_LIKE")
+  if(${DISTRO_ID_LIKE} MATCHES "rhel|centos")
+    set(RHEL_BUILD ON)
+  endif(${DISTRO_ID_LIKE} MATCHES "rhel|centos")
+endif(LINUX)
+
+message("RHEL BUILD STATUS: ${RHEL_BUILD}")
+
 set(TRITON_TENSORFLOW_CC_LIBNAME "libtensorflow_cc.so")
 set(TRITON_TENSORFLOW_FW_LIBNAME "libtensorflow_framework.so")
 set(TRITON_TENSORFLOW_LDFLAGS "-ltensorflow_cc -ltensorflow_framework")
@@ -68,7 +78,11 @@ if(${TRITON_TENSORFLOW_VERSION} EQUAL "1")
 elseif(${TRITON_TENSORFLOW_VERSION} EQUAL "2")
   set(TRITON_TENSORFLOW_BACKEND_LIBNAME triton_tensorflow)
   set(TRITON_TENSORFLOW_BACKEND_INSTALLDIR ${CMAKE_INSTALL_PREFIX}/backends/tensorflow)
-  set(TRITON_TENSORFLOW_PYTHON_PATH "/usr/local/lib/python3.10/dist-packages/tensorflow")
+  if(RHEL_BUILD)
+    set(TRITON_TENSORFLOW_PYTHON_PATH "/opt/_internal/cpython-3.10.13/lib/python3.10/site-packages/tensorflow")
+  else()
+    set(TRITON_TENSORFLOW_PYTHON_PATH "/usr/local/lib/python3.10/dist-packages/tensorflow")
+  endif(RHEL_BUILD)
 else()
   message(FATAL_ERROR "TRITON_TENSORFLOW_VERSION allowed values is '2'")
 endif()
@@ -135,7 +149,7 @@ if (${TRITON_TENSORFLOW_DOCKER_BUILD})
     COMMAND docker pull ${TRITON_TENSORFLOW_DOCKER_IMAGE}
     COMMAND docker rm tensorflow_backend_tflib || echo "error ignored..." || true
     COMMAND docker create --name tensorflow_backend_tflib ${TRITON_TENSORFLOW_DOCKER_IMAGE}
-    COMMAND docker cp -L tensorflow_backend_tflib:/usr/local/lib/tensorflow/${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
+    COMMAND docker cp -L tensorflow_backend_tflib:${TRITON_TENSORFLOW_PYTHON_PATH}/${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
     COMMAND docker cp tensorflow_backend_tflib:${TRITON_TENSORFLOW_PYTHON_PATH}/${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION}
     COMMAND docker cp tensorflow_backend_tflib:/opt/tensorflow/tensorflow-source/LICENSE LICENSE.tensorflow
     COMMAND docker rm tensorflow_backend_tflib
@@ -143,7 +157,7 @@ if (${TRITON_TENSORFLOW_DOCKER_BUILD})
     COMMAND docker stop tensorflow_backend_deps || echo "error ignored..." || true
     COMMAND docker rm tensorflow_backend_deps || echo "error ignored..." || true
     COMMAND if [ "${TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS}" = "ON" ] \; then mkdir tf_backend_deps && docker run -it -d --name tensorflow_backend_deps ${TRITON_TENSORFLOW_DOCKER_IMAGE} \; fi \;
-    COMMAND if [ "${TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS}" = "ON" ] \; then docker exec tensorflow_backend_deps sh -c  "tar -cf - /usr/lib/${LIBS_ARCH}-linux-gnu/libnccl.so*" | tar --strip-components=3 -xf - -C ./tf_backend_deps \; fi
+    COMMAND if [ "${TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS}" = "ON" ] \; then docker exec tensorflow_backend_deps sh -c  "tar -cf - $<IF:$<BOOL:${RHEL_BUILD}>,/usr/local/cuda/targets/x86_64-linux/lib/,/usr/lib/${LIBS_ARCH}-linux-gnu/>libnccl.so*" | tar --strip-components=3 -xf - -C ./tf_backend_deps \; fi
     COMMAND if [ "${TRITON_TENSORFLOW_INSTALL_EXTRA_DEPS}" = "ON" ] \; then docker stop tensorflow_backend_deps && docker rm tensorflow_backend_deps \; fi \;
 
     COMMENT "Extracting ${TRITON_TENSORFLOW_CC_LIBNAME}.${TRITON_TENSORFLOW_VERSION} and ${TRITON_TENSORFLOW_FW_LIBNAME}.${TRITON_TENSORFLOW_VERSION} from ${TRITON_TENSORFLOW_DOCKER_IMAGE}"
