@@ -551,14 +551,6 @@ GetContiguousInputContent(
   return nullptr;  // success
 }
 
-void
-FillStringTensor(TRITONTF_Tensor* tensor, const size_t idx, const size_t cnt)
-{
-  for (size_t c = 0; c < cnt; ++c) {
-    TRITONTF_TensorSetString(tensor, idx + c, nullptr, 0);
-  }
-}
-
 bool
 SetStringInputTensor(
     TRITONTF_Tensor* tensor, TRITONBACKEND_Input* input, const char* name,
@@ -581,7 +573,6 @@ SetStringInputTensor(
       &contiguous_buffer, stream, &cuda_copy);
   if (err != nullptr) {
     RESPOND_AND_SET_NULL_IF_ERROR(response, err);
-    FillStringTensor(tensor, tensor_offset, request_element_cnt);
     free(contiguous_buffer);
     return cuda_copy;
   }
@@ -605,8 +596,6 @@ SetStringInputTensor(
   size_t element_cnt = str_list.size();
   if (err != nullptr) {
     RESPOND_AND_SET_NULL_IF_ERROR(response, err);
-    FillStringTensor(
-        tensor, tensor_offset + element_cnt, request_element_cnt - element_cnt);
   }
   free(contiguous_buffer);
   return cuda_copy;
