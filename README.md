@@ -187,7 +187,8 @@ explicitly provided, the default value for this option is 4.
 Use a recent cmake to build. First install the required dependencies.
 
 ```
-$ apt-get install patchelf rapidjson-dev
+$ apt-get install rapidjson-dev python3-pip
+$ pip3 install patchelf==0.17.2
 ```
 
 The backend can be built to support TensorFlow 2.x. Starting from 23.04, Triton
